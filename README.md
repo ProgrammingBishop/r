@@ -1,4 +1,4 @@
-# Machine Learning
+### machineLearningAlgorithms
 
 |ID      |Files                             |Description                                                                                |
 |--------|----------------------------------|-------------------------------------------------------------------------------------------|
@@ -9,3 +9,10 @@
 |005     |naiveBayesPima.R                  |Implementation of Naive Bayes using the Pima Indians dataset.                              |
 |006     |principleCoordinateAnalysis.R     |Implementation of PCA using the CIFAR-10 dataset.                                          |
 |007     |supportVectorMachine.R            |Implementation of an SVM using the Adult dataset.                                          |
+
+### statsWithR
+
+|ID      |Folders                 |Description                                                                                |
+|--------|------------------------|-------------------------------------------------------------------------------------------|
+|001     |notes                   |Statistical formulas and implementations of the formulas in R.                             |
+|002     |stats420                |Example work of utilizing Statistical concepts to various datasets.                        |
