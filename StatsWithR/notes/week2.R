@@ -184,3 +184,6 @@
 
 # abline( sim.fit, lwd = 3, lty = 1, col )
 # abline ( beta_0, beta_1, lwd = 3, lty = 2, col )
+
+
+( -1.5 + ( 2.3 * 10 ) ) - ( -1.5 + ( 2.3 * 9 ) )
