@@ -92,5 +92,18 @@ crit  <- abs( qt( alpha, df ) )
 conf.int <- c( est - crit * se, est + crit * se )
 
 
+# Nested Models in R
+# ------------------------------------------------------------------------------------------
 
+# Significance of Regression
+null.model <- lm( response ~ 1, data )
+fill.model <- lm( response ~ predictor1 + predictor2, data )
+anova( null.model, full.model )
 
+# Nested model
+null.model <- lm( response ~ predictor1 + predictor2, data )
+full.model <- lm( response ~ ., data )
+anova( null.model, full.model )
+
+# Check p-vale
+1 - pf( f.stat, df1 = ( p - q ), df2 = ( n - p ) )
