@@ -369,8 +369,10 @@ beta.0.sd <- sigma * sqrt( (1 / n) + ( mean(x) ^ 2 / Sxx ) )
 base.1.sd <- sd(beta.hat.iter[ , "beta.hat.1"])
 beta.1.sd <- sigma / sqrt( Sxx )
 
-data.frame( "beta.hat.0" = c(   -5, beta.0.mean, base.0.sd, beta.0.sd ), 
-            "beat.hat.1" = c( 3.25, beta.1.mean, base.1.sd, beta.1.sd ) )
+final.table <- data.frame( "beta.hat.0" = c(   -5, beta.0.mean, base.0.sd, beta.0.sd ), 
+                           "beat.hat.1" = c( 3.25, beta.1.mean, base.1.sd, beta.1.sd ) )
+rownames( final.table ) <- c( "True Mean", "Simulated Mean", "True SD", "Simulated SD" )
+final.table
  
 ```
 
@@ -384,7 +386,8 @@ Plot two histograms side-by-side:
 
 hist( beta.hat.iter[ , "beta.hat.0"], 
       prob = TRUE, breaks = 20,
-      xlab = expression( hat(beta)[0] ) )
+      xlab = expression( hat(beta)[0] ),
+      main = "Simulated Beta Hat 0" )
 
 curve( dnorm( x, mean = beta.0.mean, sd = beta.0.sd ),
        col = 'blue', add = TRUE, lwd = 3 )
@@ -397,7 +400,8 @@ curve( dnorm( x, mean = beta.0.mean, sd = beta.0.sd ),
 
 hist( beta.hat.iter[ , "beta.hat.1"], 
       prob = TRUE, breaks = 20,
-      xlab = expression( hat(beta)[1] ) )
+      xlab = expression( hat(beta)[1] ),
+      main = "Simulated Beta Hat 1" )
 
 curve( dnorm( x, mean = beta.1.mean, sd = beta.1.sd ),
        col = 'blue', add = TRUE, lwd = 3 )
