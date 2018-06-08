@@ -1,0 +1,702 @@
+---
+title:  "Week IV"
+author: "STAT 420, Summer 2018, sbishop3"
+date:   'June 2018'
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+
+# Exercise 1 (Using `lm`)
+
+For this exercise we will use the data stored in [`nutrition-2018.csv`](nutrition-2018.csv). It contains the nutritional values per serving size for a large variety of foods as calculated by the USDA in 2018. It is a cleaned version totaling 5956 observations and is current as of April 2018.
+
+The variables in the dataset are:
+
+- `ID` 
+- `Desc` - short description of food
+- `Water` - in grams
+- `Calories` 
+- `Protein` - in grams
+- `Fat` - in grams
+- `Carbs` - carbohydrates, in grams
+- `Fiber` - in grams
+- `Sugar` - in grams
+- `Calcium` - in milligrams
+- `Potassium` - in milligrams
+- `Sodium` - in milligrams
+- `VitaminC` - vitamin C, in milligrams
+- `Chol` - cholesterol, in milligrams
+- `Portion` - description of standard serving size used in analysis
+
+
+### A  
+Fit the following multiple linear regression model in `R`. Use `Calories` as the response and `Fat`, `Sugar`, and `Sodium` as predictors.
+
+```{r}
+
+# setwd( "/Users/Sbishop/Desktop/github/rMachineLearning/statsWithR/stats420/multipleLinearRegression" )
+
+nutrition     <- read.csv( "nutrition-2018.csv" )
+mlr.nutrition <- lm( Calories ~ Fat + Sugar + Sodium, data = nutrition )
+
+y  <- nutrition$Calories
+x1 <- nutrition$Fat
+x2 <- nutrition$Sugar
+x3 <- nutrition$Sodium
+
+t.stat <- summary(mlr.nutrition)$fstatistic[1]
+
+```
+
+\  
+
+Use an $F$-test to test the significance of the regression. Report the following:  
+ 
+- The null and alternative hypotheses  
+$H_0: \beta_0 = \beta_1 = \beta_2 = \beta_3 = 0$  
+$H_1:$ at least one $\beta_j \neq 0$
+
+\  
+
+##### The value of the test statistic  
+
+$$
+test.statistic = `r summary(mlr.nutrition)$fstatistic[1]`
+$$
+
+\  
+
+##### The p-value of the test  
+
+```{r}
+
+p.value <- 2 * pt( -abs(t.stat), df = nrow(nutrition) - 4)
+
+```
+
+
+$$
+p.value = `r p.value`
+$$
+The p-value is so small that the true value cannot be displayed by R Studio.
+
+\  
+
+##### A statistical decision at $\alpha = 0.01$ 
+We would reject the null hypothesis $H_0$.
+
+\  
+
+##### A conclusion in the context of the problem  
+There does seem to be a strong linear relationships between the predictors Fat, Sodium, and Sugar and the response variable Calories.
+
+
+### B  
+Output only the estimated regression coefficients. Interpret all $\hat{\beta}_j$ coefficients in the context of the problem.
+
+```{r}
+
+est.coef <- summary(mlr.nutrition)$coefficients[ , "Estimate" ]
+
+```
+
+The estimated coefficients: 
+
+$\beta_0 = `r est.coef[1]`$  
+$\beta_1 = `r est.coef[2]`$  
+$\beta_2 = `r est.coef[3]`$  
+$\beta_3 = `r est.coef[4]`$  
+
+- The "(Intercept)" $\beta_0$ is the value of the response given the value of 0 for the predictors Fat, Sugar, and Sodium.  
+- The other predictor values $\beta_1, \beta_2, \beta_3$ represent the difference in the predicted value of the response $y$ for each unit difference of $\beta_j$ assuming the other $\beta$ values remain constant.
+
+
+### C  
+Use your model to predict the number of `Calories` in a Big Mac. According to [McDonald's publicized nutrition facts](https://www.mcdonalds.com/us/en-us/about-our-food/nutrition-calculator.html), the Big Mac contains 28g of fat, 9g of sugar, and 950mg of sodium.
+
+```{r}
+
+new.nutrition  <- data.frame( "Fat" = 28, "Sugar" = 9, "Sodium" = 950 )
+new.prediction <- predict( mlr.nutrition, new.nutrition )
+
+```
+
+$$
+calories = `r new.prediction`
+$$
+
+### D  
+Calculate the standard deviation, $s_y$, for the observed values in the Calories variable. Report the value of $s_e$ from your multiple regression model. Interpret both estimates in the context of this problem.
+
+$std.err.model    = `r summary(mlr.nutrition)['sigma']`$    
+$std.dev.calories = `r sd(y)`$
+
+Standard deviation describes the variability of the individual observations while standard error shows the variability of the estimator. In the case of this problem, the standard error represents how the observations of new food items' Fat, Sodium, and Sgar content relate to the regression plane depicting calories. The standard error would be expected to near 0 as more samples are gathered while the standard deviation will usually remain the same since it's a characteristic of a normal distribution.
+
+
+### E  
+Report the value of $R^2$ for the model. Interpret its meaning in the context of the problem.
+
+```{r}
+
+# Find y.hat
+X        <- cbind( rep( 1, nrow(nutrition) ), x1, x2, x3 )
+beta.hat <- solve( t(X) %*% X ) %*% t(X) %*% y
+y.hat    <- X %*% beta.hat
+
+# Find R Square
+SSreg    <- sum( ( y.hat - mean(y) ) ^ 2 )
+SStotal  <- sum( ( y     - mean(y) ) ^ 2 )
+r.square <- ( SSreg / SStotal )
+
+```
+
+$$
+r.square = `r r.square`
+$$
+
+About 76.86% for the observed variation in calories is explained by the linear relationship with the three predictor variables, Fat, Sodium, and Sugar.
+
+
+### F  
+Calculate a 95% confidence interval for $\beta_2$. Give an interpretation of the interval in the context of the problem.
+
+```{r}
+
+# Check Answer
+conf.int <- confint( mlr.nutrition, parm = "Sugar", level = .95 )
+
+```
+
+We are 95% confident that true change in the parameter "Calories" for change in "Sugar" is between `r conf.int[1]` and `r conf.int[2]` while keeping the values for Fat and Sodium constant.
+
+
+### G  
+Calculate a 99% confidence interval for $\beta_0$. Give an interpretation of the interval in the context of the problem.
+
+```{r}
+
+# Check Answer
+conf.int <- confint( mlr.nutrition, parm = "(Intercept)", level = .95 )
+
+```
+
+We are 99% confident that true value of "Calories" when all other predictors are constant is between `r conf.int[1]` and `r conf.int[2]`.
+
+
+### H  
+Use a 90% confidence interval to estimate the mean Calorie content of a food with 24g of fat, 0g of sugar, and 350mg of sodium, which is true of a large order of McDonald's french fries. Interpret the interval in context.
+
+```{r}
+
+new.food <- data.frame( "Fat" = 24, "Sodium" = 350, "Sugar" = 0 )
+new.inte <- predict( mlr.nutrition, new.food, interval = "confidence", .90 )$fit
+
+```
+
+We can be 90% confident that the mean estimate of "Calories" for a food item with 24g of fat, 0g of sugar, and 350mg of sodium is between `r new.inte[2]` and `r new.inte[3]`.
+ 
+ 
+### I  
+Use a 90% prediction interval to predict the Calorie content of a Taco Bell Crunchwrap Supreme that has 21g of fat, 6g of sugar, and 1200mg of sodium. Interpret the interval in context.
+
+```{r}
+
+new.food <- data.frame( "Fat" = 21, "Sodium" = 1200, "Sugar" = 6 )
+new.inte <- predict( mlr.nutrition, new.food, interval = "prediction", .90 )$fit
+
+```
+
+We can be 90% confident that the mean estimate of "Calories" in a Taco Bell Crunchwrap Supreme with 21g of fat, 6g of sugar, and 1200mg of sodium is between `r new.inte[2]` and `r new.inte[3]`.
+
+
+
+# Exercise 2 (More `lm` for Multiple Regression)
+
+For this exercise we will use the data stored in [`goalies.csv`](goalies.csv). It contains career data for 462 players in the National Hockey League who played goaltender at some point up to and including the 2014-2015 season. The variables in the dataset are:
+ 
+- `W` - Wins
+- `GA` - Goals Against
+- `SA` - Shots Against
+- `SV` - Saves
+- `SV_PCT` - Save Percentage
+- `GAA` - Goals Against Average
+- `SO` - Shutouts
+- `MIN` - Minutes
+- `PIM` - Penalties in Minutes
+
+```{r}
+
+goalies <- read.csv('goalies.csv')
+head(goalies)
+
+```
+
+
+For this exercise we will consider three models, each with Wins as the response. The predictors for these models are:
+
+- Model 1: Goals Against, Saves
+- Model 2: Goals Against, Saves, Shots Against, Minutes, Shutouts
+- Model 3: All Available
+
+```{r}
+
+model.1 <- lm( W ~ GA + SV, data = goalies )
+model.2 <- lm( W ~ GA + SV + SA + MIN + SO, data = goalies )
+model.3 <- lm( W ~ ., data = goalies )
+
+```
+
+
+### A  
+Use an $F$-test to compares Models 1 and 2. Report the following:
+
+##### The null hypothesis
+$H_0: \beta_0 = \beta_{p-1} = 0$   
+$H_1: \beta_0 = \beta_{p-1} \neq 0$
+
+\  
+
+##### The value of the test statistic
+
+$$
+t.stat = `r anova( model.1, model.2 )[ 2, 'F' ]`
+$$
+
+\  
+
+##### The p-value of the test
+
+$$
+p.value = `r anova( model.1, model.2 )[ , 'Pr(>F)'][2]`
+$$
+
+\  
+
+##### A statistical decision at $\alpha = 0.05$
+
+Reject the null hypothesis $H_0$ in favor of the alternative $H_1$.  
+At least one of the predictors in model 2 has a significant relationship with the response variable of Wins that is not in model 1.
+
+\  
+
+##### The model you prefer
+I would prefer Model 2.
+ 
+
+### B  
+Use an $F$-test to compare Model 3 to your preferred model from part **A**. Report the following:
+
+##### The null hypothesis
+$H_0: \beta_0 = \beta_{p-1} = 0$   
+$H_1: \beta_0 = \beta_{p-1} \neq 0$
+
+\  
+
+##### The value of the test statistic
+
+$$
+t.stat = `r anova( model.2, model.3 )[ ,'F'][2]`
+$$
+
+\  
+
+##### The p-value of the test
+
+$$
+`r anova( model.2, model.3 )[ , 'Pr(>F)'][2]`
+$$
+
+\  
+
+##### A statistical decision at $\alpha = 0.05$
+
+Reject the null hypothesis $H_0$ in favor of the alternative $H_1$.  
+At least one of the predictors in model 3 has a significant relationship with the resonse variable of Wins that is not present in model 2.
+
+\  
+
+##### The model you prefer
+
+I would prefer Model 3.
+
+
+### C  
+Use a $t$-test to test $H_0: \beta_{\texttt{SV}} = 0 \ \text{vs} \ H_1: \beta_{\texttt{SV}} \neq 0$ for the model you preferred in part **B**. Report the following:
+
+##### The value of the test statistic
+
+$$
+t.stat = `r summary(model.3)$coefficients[ 'SV', 't value' ]`
+$$
+
+\  
+
+##### The p-value of the test
+
+$$
+p.value = `r summary(model.3)$coefficients[ 'SV', 'Pr(>|t|)' ]`
+$$
+
+\  
+
+##### A statistical decision at $\alpha = 0.05$
+
+Reject the null hypothesis $H_0$ in favor of the alternative $H_1$.  
+Saves seems to be a significant predictor in estimating the response value, therefore it is important to include within the fitted model.
+
+
+
+# Exercise 3 (Regression without `lm`)
+
+For this exercise we will once again use the `Ozone` data from the `mlbench` package. The goal of this exercise is to fit a model with `ozone` as the response and the remaining variables as predictors.
+
+```{r}
+
+data(Ozone, package = "mlbench")
+Ozone = Ozone[, c(4, 6, 7, 8)]
+colnames(Ozone) = c("ozone", "wind", "humidity", "temp")
+Ozone = Ozone[complete.cases(Ozone), ]
+
+```
+
+
+### A  
+Obtain the estimated regression coefficients **without** the use of `lm()` or any other built-in functions for regression. That is, you should use only matrix operations. Store the results in a vector `beta_hat_no_lm`. To ensure this is a vector, you may need to use `as.vector()`. Return this vector as well as the results of `sum(beta_hat_no_lm ^ 2)`.
+
+```{r}
+
+y  <- Ozone$ozone
+x1 <- Ozone$wind
+x2 <- Ozone$humidity
+x3 <- Ozone$temp
+
+X              <- cbind( rep( 1, nrow(Ozone) ), x1, x2, x3 )
+beta.hat.no.lm <- as.vector( solve( t(X) %*% X ) %*% t(X) %*% y )
+
+```
+
+$beta.hat.no.lm = `r beta.hat.no.lm`$  
+$sum = `r sum( beta.hat.no.lm ^ 2 )`$
+
+
+### B  
+Obtain the estimated regression coefficients **with** the use of `lm()`. Store the results in a vector `beta_hat_lm`. To ensure this is a vector, you may need to use `as.vector()`. Return this vector as well as the results of `sum(beta_hat_lm ^ 2)`.
+
+```{r}
+
+mlr.ozone   <- lm( ozone ~ ., data = Ozone )
+beta.hat.lm <- as.vector( summary(mlr.ozone)$coefficients[ , "Estimate"] )
+
+```
+
+$beta.hat.no = `r beta.hat.lm`$  
+$sum = `r sum( beta.hat.lm ^ 2 )`$
+
+
+### C  
+Use the `all.equal()` function to verify that the results are the same. You may need to remove the names of one of the vectors. The `as.vector()` function will do this as a side effect, or you can directly use `unname()`.
+
+```{r}
+
+all.equal( beta.hat.no.lm, beta.hat.lm )
+
+```
+
+
+### D  
+Calculate $s_e$ without the use of `lm()`. That is, continue with your results from **A** and perform additional matrix operations to obtain the result. Output this result. Also, verify that this result is the same as the result obtained from `lm()`.
+
+```{r}
+
+y.hat      <- X %*% beta.hat.no.lm
+e          <- y - y.hat
+sigma.sqr  <- ( t(e) %*% e ) / ( nrow(Ozone) - 4 )
+sigma.eval <- sqrt( sigma.sqr )[1]
+sigma.chk  <- summary(mlr.ozone)$sigma
+
+all.equal( sigma.eval, sigma.chk )
+
+```
+
+$$
+se = `r sqrt( sigma.sqr )`
+$$
+
+
+### E  
+Calculate $R^2$ without the use of `lm()`. That is, continue with your results from **A** and **D**, and perform additional operations to obtain the result. Output this result. Also, verify that this result is the same as the result obtained from `lm()`.
+
+```{r}
+
+SSreg          <- sum( ( y.hat - mean(y) ) ^ 2 )
+SStotal        <- sum( ( y     - mean(y) ) ^ 2 )
+r.square.no.lm <- ( SSreg / SStotal )
+r.square.lm    <- summary(mlr.ozone)$r.square
+
+all.equal( r.square.no.lm, r.square.lm )
+
+```
+
+$$
+r.square = `r r.square.no.lm`
+$$
+
+
+
+# Exercise 4 (Regression for Prediction)
+
+For this exercise use the `Auto` dataset from the `ISLR` package. Use `?Auto` to learn about the dataset. The goal of this exercise is to find a model that is useful for **predicting** the response `mpg`. We remove the `name` variable as it is not useful for this analysis. (Also, this is an easier to load version of data from the textbook.)
+
+```{r}
+
+library(ISLR)
+Auto = subset(Auto, select = -c(name))
+
+```
+
+When evaluating a model for prediction, we often look at RMSE. However, if we both fit the model with all the data as well as evaluate RMSE using all the data, we're essentially cheating. We'd like to use RMSE as a measure of how well the model will predict on *unseen* data. If you haven't already noticed, the way we had been using RMSE resulted in RMSE decreasing as models became larger.
+
+To correct for this, we will only use a portion of the data to fit the model, and then we will use leftover data to evaluate the model. We will call these datasets **train** (for fitting) and **test** (for evaluating). The definition of RMSE will stay the same
+
+\[
+\text{RMSE}(\text{model, data}) = \sqrt{\frac{1}{n} \sum_{i = 1}^{n}(y_i - \hat{y}_i)^2}
+\]
+
+where
+
+- $y_i$ are the actual values of the response for the given data.
+- $\hat{y}_i$ are the predicted values using the fitted model and the predictors from the data.
+
+However, we will now evaluate it on both the **train** set and the **test** set separately. So each model you fit will have a **train** RMSE and a **test** RMSE. When calculating **test** RMSE, the predicted values will be found by predicting the response using the **test** data with the model fit using the **train** data. *__Test__ data should never be used to fit a model.*
+
+Set a seed of `1`, and then split the `Auto` data into two datasets, one called `auto_trn` and one called `auto_tst`. The `auto_trn` data frame should contain 292 randomly chosen observations. The `auto_tst` data will contain the remaining observations. Hint: consider the following code:
+
+```{r}
+
+set.seed(1)
+
+auto_trn_idx <- sample(1:nrow(Auto), 292)
+auto.trn     <- Auto[  auto_trn_idx, ]
+auto.tst     <- Auto[ -auto_trn_idx, ]
+
+```
+
+Fit a total of five models using the training data.
+
+- One must use all possible predictors.
+- One must use only `displacement` as a predictor.
+- The remaining three you can pick to be anything you like. One of these should be the *best* of the five for predicting the response.
+
+\  
+
+```{r}
+
+auto.model.1 <- lm( mpg ~ ., data = auto.trn )
+auto.model.2 <- lm( mpg ~ displacement, data = auto.trn )
+auto.model.3 <- lm( mpg ~ horsepower + cylinders, data = auto.trn )
+auto.model.4 <- lm( mpg ~ cylinders + displacement + weight, data = auto.trn )
+auto.model.5 <- lm( mpg ~ weight + cylinders + year, data = auto.trn )
+
+```
+
+For each model report the **train** and **test** RMSE. Arrange your results in a well-formatted markdown table.
+
+- Train RMSE: Model fit with *train* data. Evaluate on **train** data.
+- Test RMSE: Model fit with *train* data. Evaluate on **test** data.
+
+\  
+
+```{r}
+
+find.RMSE <- function( train, test, model )
+{
+    # Find RMSE for first train model
+    y          <- train$mpg
+    y.hat      <- predict( model, train[2:8] )
+    RMSE.train <- sqrt( ( 1 / nrow(train) ) * sum( ( y - y.hat ) ^ 2 ) )
+    
+    # Find RMSE for first test model
+    y         <- test$mpg
+    y.hat     <- predict( model, test[2:8] )
+    RMSE.test <- sqrt( ( 1 / nrow(test) ) * sum( ( y - y.hat ) ^ 2 ) )
+    
+    return( c( RMSE.train, RMSE.test ) )
+}
+
+row1 <- find.RMSE( auto.trn, auto.tst, auto.model.1 )
+row2 <- find.RMSE( auto.trn, auto.tst, auto.model.2 )
+row3 <- find.RMSE( auto.trn, auto.tst, auto.model.3 )
+row4 <- find.RMSE( auto.trn, auto.tst, auto.model.4 )
+row5 <- find.RMSE( auto.trn, auto.tst, auto.model.5 )
+
+RMSE.data <- as.data.frame( rbind( row1, row2, row3, row4, row5 ) )
+rownames(RMSE.data) <- c( 'Model 1', 'Model 2', 'Model 3', 'Model 4', 'Model 5' )
+
+library(knitr)
+
+kable( RMSE.data, digits = 6, align = 'r',
+       col.names = c( 'Train RMSE', 'Test RMSE' ) )
+    
+```
+
+\  
+
+Argue that one of your models is the best for predicting the response.
+
+Model 5 with the predictors 'weight', 'cylinders', and 'year' would be the best model for predicting the response because its RMSE on the test data is $`r RMSE.data[ 5, 2 ]`$. While this value may be larger than the RMSE for the full model by a nominal amount, the simplicity of model 5 with 3 predictors is more ideal than the complexity of the full model using 7 predictors.
+
+
+# Exercise 5 (Simulating Multiple Regression)
+
+```{r}
+
+set.seed(420)
+
+n         <- 42
+beta.0    <- 2
+beta.1    <- -.75
+beta.2    <- 1.5
+beta.3    <- 0
+beta.4    <- 0
+beta.5    <- 2
+sigma.sqr <- 25
+sigma     <- 5
+
+```
+
+
+### A  
+We will first generate the $X$ matrix and data frame that will be used throughout the exercise. Create the following nine variables:
+
+```{r}
+
+x0 <- rep( 1, length = n )
+x1 <- rnorm( length(x0), mean = 0, sd = 2 )
+x2 <- runif( length(x0), min = 0, max = 4 )
+x3 <- rnorm( length(x0), mean = 0, sd = 1 )
+x4 <- runif( length(x0), min = -2, max = 2 )
+x5 <- rnorm( length(x0), mean = 0, sd = 2 )
+
+X <- cbind( x0, x1, x2, x3, x4, x5 )
+C <- solve( t(X) %*% X )
+y <- rep( 0, length(x0) )
+
+sim.data <- data.frame( 'y' = y, 'x1' = x1, 'x2' = x2, 'x3' = x3, 'x4' = x4, 'x5' = x5 )
+
+```
+
+
+Report the sum of the diagonal of `C` as well as the 5th row of `sim_data`. For this exercise we will use the seed `420`. Generate the above variables in the order listed after running the code below to set a seed.
+
+$$
+C.diag = `r sum( diag(C) )`
+$$ 
+
+$$
+row.5 = `r sim.data[ 5, ]`
+$$
+
+### B  
+Create three vectors of length `2500` that will store results from the simulation in part **C**. Call them `beta_hat_1`, `beta_3_pval`, and `beta_5_pval`.
+
+```{r}
+
+beta_hat_1  <- rep( 0, 2500 )
+beta_3_pval <- rep( 0, 2500 )
+beta_5_pval <- rep( 0, 2500 )
+
+```
+
+
+### C  
+Simulate 2500 samples of size `n = 42` from the model above. Each time update the `y` value of `sim_data`. Then use `lm()` to fit a multiple regression model.
+
+```{r}
+
+for ( i in 1:length(beta_hat_1) )
+{
+    epsilon <- rnorm( n, mean = 0, sd = sigma )
+    sim.data$y     <- beta.0 + ( beta.1 * x1 ) + ( beta.2 * x2 ) + 
+                      ( beta.3 * x3 ) + ( beta.4 * x4 ) + ( beta.5 * x5 ) + epsilon
+    fit            <- lm( y  ~ x1 + x2 + x3 + x4 + x5, data = sim.data )
+    beta_hat_1[i]  <- coef(fit)['x1']
+    beta_3_pval[i] <- 2 * summary(fit)$coefficients[ 4, "Pr(>|t|)" ]
+    beta_5_pval[i] <- 2 * summary(fit)$coefficients[ 6, "Pr(>|t|)" ]
+}
+
+```
+
+
+### D  
+Based on the known values of $X$, what is the true distribution of $\hat{\beta}_1$?
+
+```{r}
+
+summary( sim.data$x1 )
+
+hist( sim.data$x1, prob = TRUE, breaks = 20,
+      xlab = expression( hat(beta)[1] ), main = "", border = "dodgerblue" )
+
+```
+
+
+### E  
+Calculate the mean and variance of `beta_hat_1`. Are they close to what we would expect? 
+
+$beta.hat.1.mean = `r mean( beta_hat_1 )`$  
+$beta.hat.1.var  = `r var( beta_hat_1 )`$ 
+
+The mean and variance of $\hat{\beta_1}$ are close to what is expected.
+
+\  
+
+Plot a histogram of `beta_hat_1`. Add a curve for the true distribution of $\hat{\beta}_1$. Does the curve seem to match the histogram?
+
+```{r}
+
+hist( beta_hat_1, prob = TRUE, breaks = 20,
+      xlab = expression( hat(beta)[1] ), main = "", border = "dodgerblue" )
+
+curve( dnorm( x, mean = beta.1, sd = sqrt( sigma.sqr * C[ 2, 2 ] ) ),
+       col = "darkorange", add = TRUE, lwd = 3 )
+
+```
+
+The curve does match the histogram.
+
+
+### F  
+What proportion of the p-values stored in `beta_3_pval` is less than 0.10? Is this what you would expect?
+
+```{r}
+
+pval.prop <- length( beta_3_pval[ beta_3_pval < .1 ] ) / length( beta_3_pval )
+
+```
+
+$$
+p.value = `r pval.prop`
+$$
+
+Yes
+
+
+### G  
+What proportion of the p-values stored in `beta_5_pval` is less than 0.01? Is this what you would expect?
+
+```{r}
+
+pval.prop <- length( beta_5_pval[ beta_5_pval < .01 ] ) / length( beta_5_pval )
+
+```
+
+$$
+p.value = `r pval.prop`
+$$
+
+Yes
