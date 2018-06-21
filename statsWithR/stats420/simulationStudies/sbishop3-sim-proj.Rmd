@@ -1,0 +1,876 @@
+---
+title:  "Simulation Project"
+author: "STAT 420, Summer 2018, Scott Bishop ~ sbishop3"
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+```{r, echo = FALSE, warning = FALSE}
+
+# Libraries
+library(knitr)
+
+
+# Set Directory
+setwd( '/Users/Sbishop/Desktop/sbishop3-sim-proj' )
+
+```
+
+
+# Simulation Study 1: Significance of Regression
+
+### Introduction
+
+For this simulation study the goal is to utilize the provided parameters in 'study_1.csv' and various $\sigma$ values [$1$, $5$, $10$] and run $2,500$ simulations for each $\sigma$ to find, for each iteration, an empirical distribution for the f-statistic, p-value, and $R^2$ values. This should be completed for a significant model and a non-significant model for a total of $15,000$ simulations.  The overall goal of this simulation study is to compare a large number of simulated values' distribution to the true values for both a model with parameters $\neq 0$ and a model with parameters $= 0$.  
+
+\  
+
+### Methods
+
+```{r, echo = FALSE, warning = FALSE}
+
+# Set Seed
+birthday = 19920917
+set.seed(birthday)
+
+```
+
+##### Parameters
+
+```{r}
+
+# Read CSV
+study.1 <- read.csv( './study_1.csv' )
+
+
+# Base Variables
+n     <- 25
+p     <- 4
+sims <- 2500
+sigma <- list( '1' = 1, '5' = 5, '10' = 10 )
+
+
+# Parameters
+y  <- study.1$y
+x0 <- rep( 1, n )
+x1 <- study.1$x1
+x2 <- study.1$x2
+x3 <- study.1$x3
+
+```
+
+##### Simulation Function
+
+```{r}
+
+simulation <- function( sigma ) 
+{
+    # Create Temporary Matrix to Store Interation Results
+    temp.matrix           <- matrix( 0, nrow = sims, ncol = 3 )
+    colnames(temp.matrix) <- c( 'f.stat', 'p.val', 'r.sqr' )
+    
+    # For every iteration
+    for ( i in 1:nrow(temp.matrix) )
+    {
+        # Generate an MLR model
+        epsilon   <- rnorm( n, mean = 0, sd = sigma ^ 2 )
+        y         <- beta.0 + (beta.1 * x1) + (beta.2 * x2) + (beta.3 * x3) + epsilon
+        mlr.model <- lm( y ~ x1 + x2 + x3 )
+        
+        # Obtain the Values Sought After
+        f.stat    <- summary(mlr.model)$fstatistic['value']
+        p.val     <- 2 * pt( f.stat, df = n - p, lower.tail = FALSE)
+        r.sqr     <- summary(mlr.model)$r.squared
+        
+        # Populate Current Matrix Row with Values
+        temp.matrix[i, 'f.stat'] <- f.stat
+        temp.matrix[i, 'p.val']  <- p.val
+        temp.matrix[i, 'r.sqr']  <- r.sqr
+    }
+    
+    return( temp.matrix )
+}
+
+```
+
+##### Significant Model  
+
+$$
+Y_i = \beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + e_i
+$$
+
+\  
+
+```{r}
+
+beta.0 <- 3
+beta.1 <- 1
+beta.2 <- 1
+beta.3 <- 1
+
+
+# For Each Sigma
+sig.model.1  <- simulation( sigma$`1` )
+sig.model.5  <- simulation( sigma$`5` )
+sig.model.10 <- simulation( sigma$`10` )
+
+```
+
+##### Non-significant Model  
+
+$$
+Y_i = \beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + e_i
+$$
+
+\  
+
+```{r}
+
+beta.0 <- 3
+beta.1 <- 0
+beta.2 <- 0
+beta.3 <- 0
+
+
+# For Each Sigma
+non.sig.model.1  <- simulation( sigma$`1` )
+non.sig.model.5  <- simulation( sigma$`5` )
+non.sig.model.10 <- simulation( sigma$`10` )
+
+```
+
+##### Functions to Plot Values
+
+```{r}
+
+# F-Statistic
+plot.f.dists <- function( sig.model, main.label, max.y ) 
+{
+    hist( sig.model[ , 'f.stat'], prob = TRUE, breaks = 10, ylim = c( 0, max.y ), 
+          xlab = '', main = main.label, border = "dodgerblue" )
+    curve( df( x, df1 = 24, df2 = 21 ), add = TRUE, col = 'red' ) 
+}
+
+
+# P-Values
+plot.p.vals <- function( sig.model, main.label ) 
+{
+    hist( sig.model[ , 'p.val'], prob = TRUE, breaks = 10, 
+          xlab = '', main = main.label, border = "dodgerblue" )
+    curve( 1 - pf( x, df1 = 24, df2 = 21 ), add = TRUE, col = 'red' ) 
+}
+
+
+# R-Squared
+plot.r.sqr <- function( sig.model, main.label ) 
+{
+    hist( sig.model[ , 'r.sqr'], prob = TRUE, breaks = 50, 
+          xlab = '', main = main.label, border = "dodgerblue", col = 'lightgrey' )
+}
+
+```
+
+\  
+
+### Results
+
+```{r, echo = FALSE, warning = FALSE}
+
+par( mfrow = c( 2, 3 ) )
+
+```
+
+##### F-Statistics
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 3}
+
+# Significant
+plot.f.dists( sig.model.1,  'F-Statistic \n(Significant Sigma =  1)', .05 )
+plot.f.dists( sig.model.5,  'F-Statistic \n(Significant Sigma =  5)',   1 )
+plot.f.dists( sig.model.10, 'F-Statistic \n(Significant Sigma = 10)',   1 )
+
+# Non-significant
+plot.f.dists( non.sig.model.1,  'F-Statistic \n(Non-significant Sigma =  1)', 1 )
+plot.f.dists( non.sig.model.5,  'F-Statistic \n(Non-significant Sigma =  5)', 1 )
+plot.f.dists( non.sig.model.10, 'F-Statistic \n(Non-significant Sigma = 10)', 1 )
+
+```
+
+##### P-Values
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 3}
+
+# Significant
+plot.p.vals( sig.model.1,  'P-Values \n(Significant Sigma =  1)' )
+plot.p.vals( sig.model.5,  'P-Values \n(Significant Sigma =  5)' )
+plot.p.vals( sig.model.10, 'P-Values \n(Significant Sigma = 10)' )
+
+# Non-significant
+plot.p.vals( non.sig.model.1,  'P-Values \n(Non-significant Sigma =  1)' )
+plot.p.vals( non.sig.model.5,  'P-Values \n(Non-significant Sigma =  5)' )
+plot.p.vals( non.sig.model.10, 'P-Values \n(Non-significant Sigma = 10)' )
+
+```
+
+##### R-Squared
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 3}
+
+# R-Squared
+# --------------------------------------------------
+
+# Significant
+plot.r.sqr( sig.model.1,  'R-Squared \n(Significant Sigma =  1)' )
+plot.r.sqr( sig.model.5,  'R-Squared \n(Significant Sigma =  5)' )
+plot.r.sqr( sig.model.10, 'R-Squared \n(Significant Sigma = 10)' )
+
+# Non-significant
+plot.r.sqr( non.sig.model.1,  'R-Squared \n(Non-significant Sigma =  1)' )
+plot.r.sqr( non.sig.model.5,  'R-Squared \n(Non-significant Sigma =  5)' )
+plot.r.sqr( non.sig.model.10, 'R-Squared \n(Non-significant Sigma = 10)' )
+
+```
+
+
+### Discussion
+
+##### Do we know the true distribution of any of these values?  
+
+We know the true distribution for the f-statistic and the p-value through the degrees of freedom provided and the use of the 'df()' and 'pf()' functions. These true distributions are represented as curves for the f-statistic and p-value plots.  
+
+\  
+
+##### How do the empirical distributions from the simulations compare to the true distributions? 
+
+###### Regarding the f-statistic:  
+The true distribution for the f-statistic is mostly close to the empirical distribution of the f-statistic. The exception is with the significant model at $\sigma = 1$, the empirical model does not seem to line up too well with the true distribution.
+
+###### Regarding the p-value:  
+The true distribution of the p-value seems to align with the empirical distribution of the p-value between both the significant model and non-significant model for the three values of $\sigma$.  
+
+\  
+
+##### How are R2 and σ related? Is this relationship the same for the significant and non-significant models?
+
+For the significant model the value of $R^2$ seems to become more right-skewed as the value of $\sigma$ increases. For the non-significant model the value of $R^2$ seems to always be more right-skewed.  
+
+\  
+
+# Simulation Study 2: Using RMSE for Selection
+
+### Introduction
+
+For this simulation study the goal is to verify how powerful cross-validation is when utilizing train and test splits. The way to do this is to repeat the process many times and take the average, this way if a split is unfair, the large amount of other iterations can correct for it and ultimately output the appropriate model. To accomplish this, there will be $1,000$ iterations for three values of $\sigma$, ($1$, $2$, $4$) using the 'study_2.csv'. Each iteration will accomplish the following:
+
+- Split the data $\frac{50}{50}$ into Test and Train sets (500 total split into 250 train and 250 test)
+- Fit $9$ different models using the training data's parameters
+- Find the Test and Train RMSE values (Test data is never used to fit a model)
+
+After obtaining this data, the test and train RMSE results will be plotted together for each $\sigma$ as a line chart to see how the two compare. Also, for each model for each $\sigma$ a bar chart will becreated to count the number of iterations each model had been chosen as the best model.  
+
+\  
+
+
+### Methods
+
+```{r, echo = FALSE, warning = FALSE}
+
+# Set Seed
+birthday = 19920917
+set.seed(birthday)
+
+```
+
+##### Parameters
+
+```{r}
+
+# Read CSV
+study.2 <- read.csv( './study_2.csv' )
+
+
+# Global Parameters 
+n     <- 500
+sims  <- 1000
+sigma <- list( '1' = 1, '2' = 2, '4' = 4 )
+
+
+# Beta Parameters
+beta.0 <- 0
+beta.1 <- 5
+beta.2 <- -4
+beta.3 <- 1.6
+beta.4 <- -1.1
+beta.5 <- .7
+beta.6 <- .3
+
+
+# X Parameters
+x0 <- rep( 1, n )
+x1 <- study.2$x1
+x2 <- study.2$x2
+x3 <- study.2$x3
+x4 <- study.2$x4
+x5 <- study.2$x5
+x6 <- study.2$x6
+x7 <- study.2$x7
+x8 <- study.2$x8
+x9 <- study.2$x9
+
+```
+
+##### Model
+
+$$
+Y_i = \beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + \beta_4x_{i4} + \beta_5x_{i5} + \beta_6x_{i6} + e_i
+$$
+
+\  
+
+##### Function to Calculate Test and Train RMSE
+
+```{r}
+
+find.RMSE <- function( train, test, model )
+{
+    # Find RMSE for first train model
+    y          <- train$y
+    y.hat      <- predict( model, train[2:10] )
+    RMSE.train <- sqrt( ( 1 / nrow(train) ) * sum( ( y - y.hat ) ^ 2 ) )
+    
+    # Find RMSE for first test model
+    y         <- test$y
+    y.hat     <- predict( model, test[2:10] )
+    RMSE.test <- sqrt( ( 1 / nrow(test) ) * sum( ( y - y.hat ) ^ 2 ) )
+    
+    return( c( RMSE.train, RMSE.test ) )
+}
+
+```
+
+##### Function to Obtain RMSE Values 
+
+```{r}
+
+calculate.RMSE <- function()
+{
+    # Create Data Structures to Hold Loop Results
+    temp.train <- list( 'train.sigma.model.1' = matrix( 0, nrow = sims, ncol = 9 ),
+                        'train.sigma.model.2' = matrix( 0, nrow = sims, ncol = 9 ),
+                        'train.sigma.model.4' = matrix( 0, nrow = sims, ncol = 9 ) )
+    
+    temp.test <- list( 'test.sigma.model.1' = matrix( 0, nrow = sims, ncol = 9 ),
+                       'test.sigma.model.2' = matrix( 0, nrow = sims, ncol = 9 ),
+                       'test.sigma.model.4' = matrix( 0, nrow = sims, ncol = 9 ) )
+    
+    # For Each Sigma
+    for ( i in 1:length(sigma) )
+    {
+        # And For 1,000 Iterations
+        for ( j in 1:sims )
+        {
+            # Split Data into Test and Train Set
+            study.2.index <- sample( 1:nrow(study.2), 250 )
+            study.2.train <- study.2[  study.2.index, ]
+            study.2.test  <- study.2[ -study.2.index, ]
+            
+            # Find y
+            epsilon   <- rnorm( n, mean = 0, sd = sigma[[i]] ^ 2 )
+            study.2$y <- beta.0 +
+                         (beta.1 * x1) + (beta.2 * x2) + (beta.3 * x3) +
+                         (beta.4 * x4) + (beta.5 * x5) + (beta.6 * x6) + epsilon
+            
+            # Fit 9 Models
+            model.1 <- lm( y ~ x1, data = study.2.train )
+            model.2 <- lm( y ~ x1 + x2, data = study.2.train )
+            model.3 <- lm( y ~ x1 + x2 + x3, data = study.2.train )
+            model.4 <- lm( y ~ x1 + x2 + x3 + x4, data = study.2.train )
+            model.5 <- lm( y ~ x1 + x2 + x3 + x4 + x5, data = study.2.train ) 
+            model.6 <- lm( y ~ x1 + x2 + x3 + x4 + x5 + x6, data = study.2.train )
+            model.7 <- lm( y ~ x1 + x2 + x3 + x4 + x5 + x6 + x7, data = study.2.train )
+            model.8 <- lm( y ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, data = study.2.train )
+            model.9 <- lm( y ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, data = study.2.train )
+            
+            # Calculate Train and Test RMSE for Each Model
+            # Return: c( Train RMSE, Test RMSE )
+            RMSE.vals.1 <- find.RMSE( study.2.train, study.2.test, model.1 )
+            RMSE.vals.2 <- find.RMSE( study.2.train, study.2.test, model.2 )
+            RMSE.vals.3 <- find.RMSE( study.2.train, study.2.test, model.3 )
+            RMSE.vals.4 <- find.RMSE( study.2.train, study.2.test, model.4 )
+            RMSE.vals.5 <- find.RMSE( study.2.train, study.2.test, model.5 )
+            RMSE.vals.6 <- find.RMSE( study.2.train, study.2.test, model.6 )
+            RMSE.vals.7 <- find.RMSE( study.2.train, study.2.test, model.7 )
+            RMSE.vals.8 <- find.RMSE( study.2.train, study.2.test, model.8 )
+            RMSE.vals.9 <- find.RMSE( study.2.train, study.2.test, model.9 )
+            
+            # Add Train Values
+            # In temp.train list item i, add Train RMSE at row j for each column (model)
+            temp.train[[i]][j, 1] <- RMSE.vals.1[1]
+            temp.train[[i]][j, 2] <- RMSE.vals.2[1]
+            temp.train[[i]][j, 3] <- RMSE.vals.3[1]
+            temp.train[[i]][j, 4] <- RMSE.vals.4[1]
+            temp.train[[i]][j, 5] <- RMSE.vals.5[1]
+            temp.train[[i]][j, 6] <- RMSE.vals.6[1]
+            temp.train[[i]][j, 7] <- RMSE.vals.7[1]
+            temp.train[[i]][j, 8] <- RMSE.vals.8[1]
+            temp.train[[i]][j, 9] <- RMSE.vals.9[1]
+            
+            # Add Test Values
+            # In temp.test list item i, add Test RMSE at row j for each column (model)
+            temp.test[[i]][j, 1] <- RMSE.vals.1[2]
+            temp.test[[i]][j, 2] <- RMSE.vals.2[2]
+            temp.test[[i]][j, 3] <- RMSE.vals.3[2]
+            temp.test[[i]][j, 4] <- RMSE.vals.4[2]
+            temp.test[[i]][j, 5] <- RMSE.vals.5[2]
+            temp.test[[i]][j, 6] <- RMSE.vals.6[2]
+            temp.test[[i]][j, 7] <- RMSE.vals.7[2]
+            temp.test[[i]][j, 8] <- RMSE.vals.8[2]
+            temp.test[[i]][j, 9] <- RMSE.vals.9[2]
+        }
+    }
+    
+    return( c( temp.train, temp.test ) )
+}
+
+```
+
+##### Run the Simulation
+
+```{r}
+
+# Obtain RMSE Values for Test and Train
+temp.data <- calculate.RMSE() 
+
+
+# Extract RMSE Values into Train Datasets
+train.RMSE.values <- temp.data[1:3]
+colnames(train.RMSE.values[[1]]) <- c( '1', '2', '3', '4', '5', '6', '7', '8', '9' )
+colnames(train.RMSE.values[[2]]) <- c( '1', '2', '3', '4', '5', '6', '7', '8', '9' )
+colnames(train.RMSE.values[[3]]) <- c( '1', '2', '3', '4', '5', '6', '7', '8', '9' )
+
+
+# Extract RMSE Values into Test Datasets
+test.RMSE.values <- temp.data[4:6]
+colnames(test.RMSE.values[[1]]) <- c( '1', '2', '3', '4', '5', '6', '7', '8', '9' )
+colnames(test.RMSE.values[[2]]) <- c( '1', '2', '3', '4', '5', '6', '7', '8', '9' )
+colnames(test.RMSE.values[[3]]) <- c( '1', '2', '3', '4', '5', '6', '7', '8', '9' )
+
+```
+
+##### Functions to Generate Plots
+
+```{r}
+
+x.labels <- c( 'Model 1', 'Model 2', 'Model 3', 'Model 4', 'Model 5', 
+               'Model 6', 'Model 7', 'Model 8', 'Model 9' )
+
+
+# Plot Average RMSE for Train and Test Data
+create.line.plot <- function( train.model, test.model, main.label, y.lim )
+{
+    # Create Plot for Train RMSE
+    plot( train.model, main = main.label, ylim = y.lim, 
+          xlab = 'Model Number', ylab = 'Average RMSE',
+          type = 'b', xaxt = "n", col  = 'dodgerblue' )
+    
+    # Add Line for Test RMSE
+    points( test.model, col = "red", pch = 4 )
+    lines ( test.model, col = "red", lty = 2 )
+    
+    # Add X-Axis & Gridlines
+    axis( side = 1, at = 1:9, labels = x.labels, cex.axis = 0.8 )
+    grid( NULL, NULL )
+    
+    # Add Legend
+    legend( x = 'topright', y = 'topright',
+            inset = .02, cex = 1, box.lty = 0, lty = 1:2,
+            title   = "RMSE Type",
+            legend  = c( 'Train RMSE', 'Test RMSE' ),
+            col     = c( 'dodgerblue', 'red' ) )
+}
+
+
+# Plot Count for Model Chosen
+create.hist.plot <- function( test.model, main.label )
+{
+    new.hist <- hist( test.model, main = main.label, 
+                      xlab = 'Model Number', ylab = 'Times Chosen',
+                      xlim = c( 1, 10 ), breaks = c(1:10),
+                      xaxt = "n", border = 'dodgerblue', col = 'lightgrey' )
+    
+    new.hist
+    axis( side = 1, at = new.hist$mids, labels = x.labels, cex.axis = 0.8 )
+    grid( NULL, NULL )
+}
+
+```
+
+##### Obtain the Averages
+
+```{r}
+
+# Sigma = 1
+avg.train.RMSE.1 <- apply( train.RMSE.values[[1]], 2, function(x) { mean(x) } )
+avg.test.RMSE.1  <- apply( test.RMSE.values[[1]],  2, function(x) { mean(x) } )
+
+# Sigma = 2
+avg.train.RMSE.2 <- apply( train.RMSE.values[[2]], 2, function(x) { mean(x) } )
+avg.test.RMSE.2  <- apply( test.RMSE.values[[2]],  2, function(x) { mean(x) } )
+
+# Sigma = 4
+avg.train.RMSE.4 <- apply( train.RMSE.values[[3]], 2, function(x) { mean(x) } )
+avg.test.RMSE.4  <- apply( test.RMSE.values[[3]],  2, function(x) { mean(x) } )
+
+```
+
+##### Select the Best Models
+
+```{r}
+
+best.sigma.1.test <- apply( test.RMSE.values[[1]], 1, which.min )
+best.sigma.2.test <- apply( test.RMSE.values[[2]], 1, which.min )
+best.sigma.4.test <- apply( test.RMSE.values[[3]], 1, which.min )
+
+```
+
+\  
+
+### Results
+
+```{r, echo = FALSE, warning = FALSE}
+
+par( mfrow = c( 3, 1 ) )
+
+```
+
+##### Plot Average RMSEs for Train & Test
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 5 }
+
+create.line.plot( avg.train.RMSE.1, avg.test.RMSE.1, 'Average Train RMSE by Model (Sigma = 1)', c(  0.9,  2.5 ) )
+create.line.plot( avg.train.RMSE.2, avg.test.RMSE.2, 'Average Train RMSE by Model (Sigma = 2)', c(  3.9,  4.7 ) )
+create.line.plot( avg.train.RMSE.4, avg.test.RMSE.4, 'Average Train RMSE by Model (Sigma = 4)', c( 15.5, 16.75 ) )
+
+```
+
+##### Plot Times Model Selected
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 3}
+
+create.hist.plot( best.sigma.1.test, 'Count of Best Model (Sigma = 1)' )
+create.hist.plot( best.sigma.2.test, 'Count of Best Model (Sigma = 2)' )
+create.hist.plot( best.sigma.4.test, 'Count of Best Model (Sigma = 4)' )
+
+```
+
+
+### Discussion
+
+##### Does the method always select the correct model? On average, does it select the correct model?
+
+The method seems to select the correct model (Model 5) more frequently for lower values of $\sigma$. As the value of $\sigma$ increases the method is less reliable in selecting the correct model. Based on the hist plots, simply increasing $\sigma$ from a value of $1$ to $2$, the method gets confused with Model 2, Model 3, and Model 5. In fact Model 1 is chosen more often. When increasing $\sigma$ from $2$ to $4$, the method almost always selects the Model 1 and Model 5 is one of the lowest occurances of selection.  
+
+One reason this can be is due to overfitting. By looking at the line plots the train and test RMSE seem to follow very close to one another for $\sigma = 1$, but for $\sigma = 2$ and $\sigma = 4$ the test RMSE begins to diverge greatly from the train RMSE and both average RMSE values seeme to increase exponentially by $2$ for increases in $\sigma$. This phenomenon depicts how a method for training data can get really good at looking at training data, but when introduced to new data there is more likelihood for error in model selection.  
+
+\  
+
+##### How does the level of noise affect the results?
+
+The level of noise seems to affect the results significantly with larger values of $\sigma$. This could be due to the fact that some values between the models are close to one another, and with enough variation the method could get confused between multiple models that come close to one another. It would be very interesting to utilize support vector machines to see how close different simulation results come to the boundary seperating labels
+
+\  
+
+# Simulation Study 3: Power
+
+### Introduction
+
+For this simulation the goal is to observe how $n$, $beta_1$, $\sigma$, and number of simulations can affect the power, which is the proportion of times of correctly rejecting $H_0$ when $H_1$ is correct (Type I Error). To accomplish this, the simulation will look at $n = 10$, $n = 20$, and $n = 30$, $\sigma = 1$, $\sigma = 2$, and $\sigma = 4$, $\beta_1 = seq(-2, 2, .1)$, using $1,000$ simulations for each $n$ and each $\sigma$.  
+
+For each $\beta_1$ using each $\sigma$ and $n$, the simulation will find the significance level and compare the $1,000$ significant values to an $\alpha = .05$ to obtain an overall proportion. After achieving this proportion for each $\beta_1$ using each $\sigma$ and each $n$, three plots will be created, each plotting three power curves; each curve representing $n$ and each plot representing a different value for $\sigma$. These plots will help visualize how the various parameters affect the power curve and ideally find optimal approaches to improving a method.  
+
+\  
+
+### Methods
+
+##### Parameters
+
+```{r}
+
+beta.0 <- 0
+beta.1 <- seq( from = -2, to = 2, by = .1 )
+sigma  <- list( '1' = 1, '2' = 2, '4' = 4 ) 
+n      <- list( '10' = 10, '20' = 20, '30' = 30 ) 
+alpha  <- .05
+sims   <- 1000
+
+x <- list( '10' = seq( 0, 5, length = n$`10` ), 
+           '20' = seq( 0, 5, length = n$`20` ), 
+           '30' = seq( 0, 5, length = n$`30` ) )
+
+```
+
+##### Models
+
+$$
+Y_i = \beta_0 + \beta_1x_{i1} + e_i
+$$
+
+\  
+
+##### Function to Calculate Significant Values
+
+```{r}
+
+calculate.p.vals <- function( x, sig ) 
+{
+    # Create Temporary 1,000 * 41 Matrix 
+    temp.matrix           <- matrix( 0, nrow = sims, ncol = length( beta.1 ) )
+    colnames(temp.matrix) <- beta.1
+    
+    # For Every Beta Value
+    for ( beta in 1:ncol(temp.matrix) )
+    {
+        # For 1,000 Iterations
+        for ( iter in 1:sims )
+        {
+            epsilon   <- rnorm( length(x), mean = 0, sd = sig ^ 2 )
+            y         <- beta.0 + (beta.1[[beta]] * x) + epsilon
+            slr.model <- lm( y ~ x )
+            p.value   <- summary(slr.model)$coefficient['x', 'Pr(>|t|)']
+            
+            # Add Value to Current Row and Current Beta Column
+            temp.matrix[iter, beta] <- p.value
+        }
+    }
+
+    return( temp.matrix )
+}
+
+```
+
+##### Function to Calculate the Power
+
+```{r}
+
+calculate.power <- function( power.sigma ) 
+{
+    temp.vector <- rep( 0, ncol(power.sigma) )
+    
+    # For Every Beta Value
+    for ( col in 1:length(temp.vector) )
+    {
+        # Find Proportion that is Rejected
+        temp.vector[[col]] <- 
+            length( power.sigma[ power.sigma[ , col ] < alpha, col ] ) / sims
+    }
+    
+    return( temp.vector )
+}
+
+```
+
+##### Run the Simulations
+
+```{r}
+
+# Sigma = 1
+# --------------------------------------------------
+power.sig.1.n.10 <- calculate.p.vals( x$`10`, sigma$`1` )
+power.sig.1.n.20 <- calculate.p.vals( x$`20`, sigma$`1` )
+power.sig.1.n.30 <- calculate.p.vals( x$`30`, sigma$`1` )
+
+
+# Sigma = 2
+# --------------------------------------------------
+power.sig.2.n.10 <- calculate.p.vals( x$`10`, sigma$`2` )
+power.sig.2.n.20 <- calculate.p.vals( x$`20`, sigma$`2` )
+power.sig.2.n.30 <- calculate.p.vals( x$`30`, sigma$`2` )
+
+
+# Sigma = 4
+# --------------------------------------------------
+power.sig.4.n.10 <- calculate.p.vals( x$`10`, sigma$`4` )
+power.sig.4.n.20 <- calculate.p.vals( x$`20`, sigma$`4` )
+power.sig.4.n.30 <- calculate.p.vals( x$`30`, sigma$`4` )
+
+```
+
+##### Calculate the Powers
+
+```{r}
+
+# Power when Sigma = 1
+# --------------------------------------------------
+prop.sig.1.n.10 <- calculate.power( power.sig.1.n.10 )
+prop.sig.1.n.20 <- calculate.power( power.sig.1.n.20 )
+prop.sig.1.n.30 <- calculate.power( power.sig.1.n.30 )
+
+
+# Power when Sigma = 2
+# --------------------------------------------------
+prop.sig.2.n.10 <- calculate.power( power.sig.2.n.10 )
+prop.sig.2.n.20 <- calculate.power( power.sig.2.n.20 )
+prop.sig.2.n.30 <- calculate.power( power.sig.2.n.30 )
+
+
+# Power when Sigma = 4
+# --------------------------------------------------
+prop.sig.4.n.10 <- calculate.power( power.sig.4.n.10 )
+prop.sig.4.n.20 <- calculate.power( power.sig.4.n.20 )
+prop.sig.4.n.30 <- calculate.power( power.sig.4.n.30 )
+
+```
+
+##### Function to Plot Power Curves
+
+```{r}
+
+create.power.plot <- function( sig.model.1, sig.model.2, sig.model.3, main.label, y.lim )
+{
+    # Create Plot for Power with N = 10
+    plot( sig.model.1, main = main.label, ylim = y.lim,
+          xlab = expression( beta[1] ), ylab = 'Power Level',
+          type = 'l', xaxt = "n", col = 'dodgerblue' )
+    
+    # Add Line for for Power with N = 20
+    lines ( sig.model.2, col = "red", lty = 2 )
+    
+    # Add Line for for Power with N = 30
+    lines ( sig.model.3, col = "purple", lty = 3 )
+    
+    # Add X-Axis & Gridlines
+    axis( side = 1, at = 1:41, labels = beta.1, cex.axis = 0.5 )
+    grid( NULL, NULL )
+    
+    # Add Legend
+    legend( x = 'bottomleft', y = 'bottomleft',
+            inset = .02, cex = 1, box.lty = 0, lty = 1,
+            title   = "Value of N",
+            legend  = c( '10', '20', '30' ),
+            col     = c( 'dodgerblue', 'red', 'purple' ) )
+}
+
+```
+
+\  
+
+### Results
+
+##### Plot the Power Curve for Each N for Each Value of Sigma
+
+```{r, echo = FALSE, warning = FALSE}
+
+par( mfrow = c( 3, 1 ) )
+
+```
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 3}
+
+create.power.plot( prop.sig.1.n.10, prop.sig.1.n.20, prop.sig.1.n.30, 
+                   'Power Curve with Sigma = 1', c( 0, 1 ) )
+
+create.power.plot( prop.sig.2.n.10, prop.sig.2.n.20, prop.sig.2.n.30, 
+                   'Power Curve with Sigma = 2', c( 0, 1 ) )
+
+create.power.plot( prop.sig.4.n.10, prop.sig.4.n.20, prop.sig.4.n.30, 
+                   'Power Curve with Sigma = 4', c( 0, .2 ) )
+
+```
+
+### Additional Simulations
+
+##### Function to Plot Additional Power Curves for Exploration
+
+```{r}
+
+create.new.power.plot <- function( sig.model.1, main.label, y.lim )
+{
+    # Create Plot for Power Curve
+    plot( sig.model.1, main = main.label, ylim = y.lim,
+          xlab = expression( beta[1] ), ylab = 'Power Level',
+          type = 'l', xaxt = "n", col = 'dodgerblue' )
+    
+    # Add X-Axis & Gridlines
+    axis( side = 1, at = 1:41, labels = beta.1, cex.axis = 0.5 )
+    grid( NULL, NULL )
+}
+
+
+find.new.prop <- function( x, sigma )
+{
+    power <- calculate.p.vals( x, sigma )
+    return( calculate.power( power ) )
+}
+
+```
+
+##### n = 100 & sigma = 1
+
+```{r}
+
+prop.sig.1.n.100 <- find.new.prop( seq( 0, 5, length = 100 ), 1 )
+
+```
+
+##### n = 100 & sigma = 0.5
+
+```{r}
+
+prop.sig.05.n.100 <- find.new.prop( seq( 0, 5, length = 100 ), .5 )
+
+```
+
+##### n = 500 & sigma = 1
+
+```{r}
+
+prop.sig.1.n.500 <- find.new.prop( seq( 0, 5, length = 500 ), 1 )
+
+```
+
+##### n = 30 & sigma = 1 & simulations = 3,000
+
+```{r}
+
+sims                      <- 3000
+prop.sig.1.n.30.iter.3000 <- find.new.prop( seq( 0, 5, length = 30 ), 1 )
+
+```
+
+##### Plot Additional Simulations 
+
+```{r, echo = FALSE}
+
+par( mfrow = c( 2, 1 ) )
+
+```
+
+```{r, echo = FALSE, fig.align = 'center', fig.height = 3 }
+
+create.new.power.plot( prop.sig.1.n.100,          'Power Curve with Sigma = 1 & n = 100',                     c( 0, 1 ) )
+create.new.power.plot( prop.sig.05.n.100,         'Power Curve with Sigma = 0.5 & n = 100',                   c( 0, 1 ) )
+create.new.power.plot( prop.sig.1.n.500,          'Power Curve with Sigma = 1 & n = 500',                     c( 0, 1 ) )
+create.new.power.plot( prop.sig.1.n.30.iter.3000, 'Power Curve with Sigma = 1 & \nn = 30 & 3,000 Iterations', c( 0, 1 ) )
+
+```
+
+
+### Discussion
+
+##### How does n, β1, and σ affect power? Consider additional plots to demonstrate these effects.
+
+As the number of observations $n$ increases, the proportion of correctly rejecting the $H_0$ increases. So the power curve will be tighter around the $\beta_1 = 0$ value, which is the minimum proportion value between all possible $\beta$ values in the simulation.  
+
+As the value of $\beta_1$ converges to $0$, the proportion of simulations that correctly rejects $H_0$ converges to $0$ also. So when $\beta_1 = -2$ or $\beta_1 = 2$ the proportion of correctly rejecting $H_0$ will be at its peak between all other $\beta_1$ values within the interval of $-2$ and $2$.  
+
+As the value of $\sigma$ increases, the smoothness of the power curve becomes noisier, which idincates more variation of correctly rejecting $H_0$ at each value of $\beta_1$. So for a $\sigma = 1$, the power curves are relatively smooth. For a $\sigma = 4$, the power curve is extremely noisy. Also, as the value of $\sigma$ increases, the proportion of correctly rejecting $H_0$ decreases. For a $\sigma = 1$, the range of proportions is between approximately $0.05$ and $1$. For a $\sigma = 4$, the range of proportions is between approximately $0.04$ and $.175$.  
+\  
+
+##### Are 1000 simulations sufficient?
+
+$1,000$ Simulations is sufficient. When comparing the method utilizing $3,000$ simulations to the method utilizing $1,000$ simulations, the power curves are nearly identical. The improvement of the power curve would come more from changes in $n$ and $\sigma$. By increasing the number of observations $n$ to $100$, the power curve becomes tighter around $\beta_1 = 0$. When increasing $n$ to $500$ the power curve becomes even tighter around $\beta_1 = 0$. By decreasing the value of $\sigma$ to $0.5$ the power curve becomes even tighter around the $\beta_1$ value of $0$ while keeping $n$ at $100$.  
+
+So through these other models, it is evident that a smaller $\sigma$ value is ideal, although not always probably to achieve. But with a large enough $n$ the power curve can obtain a higher proportion of $\beta_1$ values that correctly reject $H_0$. When increasing the number of simulations from $1,000$ to $3,000$, the power curve plots look identical. Ultimately, decrease distribution variability, and if that is not possible, simulate or gather more observations.
