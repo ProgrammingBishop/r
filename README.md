@@ -14,5 +14,4 @@
 
 |ID      |Folders                 |Description                                                                                |
 |--------|------------------------|-------------------------------------------------------------------------------------------|
-|001     |notes                   |Statistical formulas and implementations of the formulas in R.                             |
 |002     |stats420                |Example work of utilizing Statistical concepts to various datasets.                        |
