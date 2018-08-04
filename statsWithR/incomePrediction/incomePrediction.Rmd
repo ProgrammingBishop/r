@@ -1,0 +1,515 @@
+---
+title: "US Census Demographic Data: Predicting Mean Household Income"
+author: "Sravan Kumar Gardas ~ sgardas2@illinois.edu,  Krishna Chaitanya Bandhakavi ~ kcb3@illinois.edu, Scott Bishop ~ sbishop3@illinois.edu"
+date: ''
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# Introduction
+  
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+# Libraries for the Introduction
+library(knitr) # For kable()
+
+# Libraries for the Methodology
+library(ggplot2)  # For createDataPartition()
+library(lattice)  # For createDataPartition()
+library(caret)    # For createDataPartition()
+library(boot)
+library(leaps)
+library(MASS)     # For boxcox()
+library(corrplot) # For corrplot()
+library(faraway)  # For vif()
+library(lmtest)   # For bptest()
+library(DAAG)
+
+```
+
+The US Census Demographic Data [https://www.kaggle.com/muonneutrino/us-census-demographic-data] covers demographic and economic data for tracts and counties taken from the DP03 and DP05 tables of the 2015 American Community Survey 5-year estimates. DP03 is the Data Profile for Selected Economic Characteristics and DP05 is Demographic and Housing Estimates [https://factfinder.census.gov/faces/nav/jsf/pages/community_facts.xhtml]. The overall data set includes data for each census tract in the US, including the District of Columbia and Puerto Rico. Census tracts are defined by the census bureau and will have a much more consistent size. A typical census tract has around $5,000$ or so residents.
+
+The goal of a model using this data set is to predict the mean household income for future observations using key predictors utilized to build the model. The response variable used is `Income`, which is Median household income ($). The predictors of interest are:  
+
+- `State`        [State]
+- `TotalPop`     [Total Population]
+- `Hispanic`     [Percent of Population that is Hispanic]
+- `White`        [Percent of Population that is White]
+- `Black`        [Percent of Population that is Black]
+- `Native`       [Percent of Population that is Native]
+- `Asian`        [Percent of Population that is Asian]
+- `Pacific`      [Percent of Population that is Pacific]
+- `Citizen`      [Number of Citizens]
+- `Poverty`      [Percent Under Poverty Level]
+- `PrivateWork`  [Percent in Private Work]
+- `PublicWork`   [Percent in Public Work]
+- `SelfEmployed` [Percent in Self Employed]
+- `Men`          [Number of men]
+- `Women`        [Number of women]  
+
+\  
+
+The benefit of having a model that could predict mean household income for new observations could benefit many entities. The government could benefit by having a way to predictively classify the population into income brackets, which by doing so could create segmentation that aids in targeting the population with government assistance or reallocation of resources to stimulate economic areas that could be problematic for the nation. Loan agencies could benefit by having a way to also predict the income bracket for new requesters of loans, whether it be a home loan, student loan, or a simple bank loan. A final example involves cities. Cities could predict the mean household income of their community, and by having that information they would be able to understand how the tax rates should be adjusted. Even local businesses can have a better gauge on how wealthy their potential consumer is and adjust prices accordingly, or even relocate to a more promising area.
+
+\  
+
+# Methodology
+
+```{r, warning = FALSE, message = FALSE}
+
+set.seed(19920917)
+df <- read.csv("acs2015_census_tract_data.csv")
+
+```
+
+\  
+
+### Parameters of Interest
+
+```{r}
+
+income.df <- data.frame("state"        = df$State,        
+                        "total.pop"    = df$TotalPop,        
+                        "income.cap"   = df$IncomePerCap,
+                        "white"        = df$White,        
+                        "black"        = df$Black,           
+                        "asian"        = df$Asian,
+                        "hispanic"     = df$Hispanic,     
+                        "poverty"      = df$Poverty,         
+                        "work.priv"    = df$PrivateWork,
+                        "work.publ"    = df$PublicWork,   
+                        "work.self"    = df$SelfEmployed,    
+                        "income"       = df$Income,
+                        "unemployment" = df$Unemployment, 
+                        "income.pc.er" = df$IncomePerCapErr, 
+                        "income.er"    = df$IncomeErr,
+                        "men"          = df$Men,          
+                        "women"        = df$Women)
+
+```
+
+\  
+
+### Remove missing values
+
+```{r}
+
+income.df <- na.omit(income.df)
+
+```
+
+\  
+
+### Test/Train Split
+
+```{r}
+
+indexes      <- createDataPartition(income.df$income, p = 0.80, list = FALSE)
+income.train <- income.df[ indexes, ]
+income.test  <- income.df[-indexes, ]
+
+```
+
+\  
+
+### Start with Additive Models and Choose Significant Parameters (AIC, BIC, LOOCV_RMSE)
+
+```{r}
+
+# Backward Search
+add.model        <- lm(income ~ ., data = income.train)
+add.model.bw.aic <- step(add.model, direction = "backward", trace = 0)
+add.model.bw.bic <- step(add.model, direction = "backward", k = log(length(resid(add.model))), trace = 0)
+
+```
+
+\  
+
+### Calculate LOOCV RMSE of AIC and BIC Models
+
+```{r}
+
+# Functon to Calculate
+calc.loocv.rmse <- function(model) 
+{
+  sqrt( mean( (resid(model) / 
+              (1 - hatvalues(model)) ) ^ 2 ) )
+}
+
+
+# Function to Return Model Choice
+choose.model <- function(model.1, model.2, message.1, message.2)
+{
+  if( which.min( c(calc.loocv.rmse(model.1), 
+                   calc.loocv.rmse(model.2)) ) == 1 ) { message.1 } 
+  else { message.2 }
+}
+
+
+# Report the best model and it's LOOCV RMSE
+selected.model <- choose.model(add.model.bw.aic, add.model.bw.bic, "Additive Backward AIC Model", "Additive Backward BIC Model")
+min.rmse       <- min( c(calc.loocv.rmse(add.model.bw.aic), calc.loocv.rmse(add.model.bw.bic)) )
+
+
+# Best Model Currently
+best.model <- add.model.bw.bic
+
+```
+
+\  
+
+The $`r selected.model`$ performs the best with RMSE: $`r min.rmse`$
+
+\  
+
+### Does Transforming Response Help
+
+```{r, fig.align = "center"}
+
+# Function to Plot Y and log(Y)
+plot.pred.resp <- function(predictor, response.type, name)
+{
+  if (response.type == "y") { plot(income ~ predictor, data = income.train, 
+                                   col  = "dodgerblue", pch = 20, cex = 1.5,
+                                   main = paste(name, "\nNo Transform", sep = " ") ) } 
+  
+  else if (response.type == "y.log") { plot(log(income) ~ predictor, data = income.train, 
+                                            col  = "dodgerblue", pch = 20, cex = 1.5,
+                                            main = paste(name, "\nLog Transform", sep = " ") ) }
+}
+
+
+# Log Transformations of Response
+par( mfrow = c(2, 2) )
+
+plot.pred.resp(income.train$poverty, "y",     "Poverty")
+plot.pred.resp(income.train$poverty, "y.log", "Poverty")
+
+plot.pred.resp(income.train$unemployment, "y",     "Unemployment")
+plot.pred.resp(income.train$unemployment, "y.log", "Unemployment")
+
+plot.pred.resp(income.train$work.priv, "y",     "Work Privately")
+plot.pred.resp(income.train$work.priv, "y.log", "Work Privately")
+
+plot.pred.resp(income.train$income.er, "y",     "Income Error")
+plot.pred.resp(income.train$income.er, "y.log", "Income Error")
+
+```
+
+\  
+
+Taking the log of the response seems to be effective for several example predictors. `income.er` will benefit, but the predictor itself will also need to be log transformed. Similar predictors to this will most likely benefit from being log transformed as well, like `income.pc.er` and `income.cap`.
+
+\  
+
+### Box-Cox Transformation for Response
+
+```{r, fig.align = "center"}
+
+# Function to DO and Undo Box-Cox Transformation
+lambda.transform <- function(y, lambda, version)
+{
+  if      (version == "boxcox")  { ( (y ^ lambda) - 1 )  / lambda  } 
+  else if (version == "inverse") { (lambda * y + 1) ^ (1 / lambda) }
+}
+
+# Test if Box-Cox is Helpful
+par( mfrow = c(1, 1) )
+boxcox(best.model, plotit = TRUE)
+
+```
+
+\  
+
+Based on the plot it seems that $\lambda$ of $0$ is selected, and based on the following conditional:
+
+$$
+g_\lambda(y) = \left\{\begin{array}
+                   {lr}
+                   \displaystyle\frac{y^\lambda - 1}{\lambda} &  \lambda \neq 0\\
+                   & \\
+                   \log(y) &  \lambda = 0
+               \end{array}
+\right.
+$$
+We will use $log(y)$, which falls in line from the above comparisons of the different predictors using an untransformed $Y$ and the $log(y)$.
+
+\  
+
+### Comparison Using log(y)
+
+```{r}
+
+# Build Models
+add.model     <- lm(income      ~ ., data = income.train)
+add.model.log <- lm(log(income) ~ ., data = income.train)
+
+# Compare Using Function Defined Earlier
+selected.model <- choose.model(add.model, add.model.log, "Non-Transformed Model", "Log Response Model")
+min.rmse       <- min( c(calc.loocv.rmse(add.model.bw.aic), calc.loocv.rmse(add.model.bw.bic)) )
+
+# New Current Best Model
+best.model <- add.model.log
+
+```
+
+\  
+
+The $`r selected.model`$ performs the best with RMSE: $`r min.rmse`$
+
+\  
+
+### Check Collinearity
+
+```{r, fig.align = "center"}
+
+# Correlation Data
+interest <- data.frame("wpr" = income.train$work.priv,    "pop" = income.train$total.pop, 
+                       "inc" = income.train$income.cap,   "wsf" = income.train$work.self, 
+                       "pov" = income.train$poverty,      "une" = income.train$unemployment,
+                       "ier" = income.train$income.er,    "wpu" = income.train$work.publ,
+                       "men" = income.train$men,          "wom" = income.train$women,
+                       "per" = income.train$income.pc.er)
+ 
+# Create Correlation Matrix
+round( cor(interest), 2 )
+  
+par( mfrow = c(1, 1) )
+corrplot(round( cor(interest), 2 ), method = "circle")
+
+```
+
+\  
+
+From the correlation matrix, it appears that `women` and `men` is highly correlated to `population` and to each other.
+
+\  
+
+### Correct for Collinearity
+
+```{r}
+
+# Remove Possible Suspect Variables
+add.model.corr <- lm(log(income) ~ . - men - women - total.pop, data = income.train)
+
+
+# Compare New Models with AIC and BIC
+add.model.bw.aic.corr <- step(add.model.corr, direction = "backward",                                         trace = 0)
+add.model.bw.bic.corr <- step(add.model.corr, direction = "backward", k = log(length(resid(add.model.corr))), trace = 0)
+
+
+# Get LOOCV_RMSE
+selected.model <- choose.model(add.model.bw.aic.corr, add.model.bw.bic.corr, 
+                               "Additive Model using Backward AIC removing Correlated Predictors",
+                               "Additive Model using Backward BIC removing Correlated Predictors")
+min.rmse <- min( c(calc.loocv.rmse(add.model.bw.aic.corr), calc.loocv.rmse(add.model.bw.bic.corr)) )
+
+
+# COmpare Best Model with Selected Model
+p.value <- anova(best.model, add.model.bw.aic.corr)[2, "Pr(>F)"]
+
+
+# Update to the Current Best Model
+best.model <- add.model.bw.aic.corr
+
+```
+
+\  
+
+The $`r selected.model`$ performs the best with RMSE: $`r min.rmse`$. The $`r selected.model`$ also is the preferred model as the $p-value$ from an anova $F$ test comparing the currently selected model with the previous best model, which was the additive model with the log response, is $`r p.value`$. SO we reject $H_0$ in favor of $H_1$: the $`r selected.model`$ is the preferred model.
+
+\  
+
+### Remove Influential Points
+
+Use `cooks distance` to identify influential points and remove them. Influential points are defined as:
+
+$$
+D_i > \frac{4}{n}
+$$
+
+
+```{r}
+
+indexes             <- which(cooks.distance(best.model) > 4 / length(cooks.distance(best.model)))
+income.train.no.lev <- income.train[-indexes, ]
+
+```
+
+\ 
+
+### Accuracy
+
+```{r}
+
+# Calculate RMSE for Test Data
+get.test.rmse <- function(model)
+{
+  predictions <- as.vector( exp( predict(model, income.test) ) )
+  sqrt( mean( (predictions - income.test$income) ^ 2) )
+}
+
+
+# Function to Calculate Accuracy
+get.accuracy <- function(model)
+{
+  predictions  <- as.vector( exp(predict(model, income.test)) )
+  actuals.pred <- data.frame( cbind( actual  = income.test$income, 
+                                     predict = predictions ) )
+  accuracy <- cor(actuals.pred)
+  round( accuracy["actual", "predict"] * 100, 2 )
+}
+
+
+# Function to Report Results
+get.results <- function(model)
+{
+  adj.r.sqr <- round(summary(model)$adj.r.square, 2) * 100
+  best.rmse <- get.test.rmse(best.model)
+  best.acc  <- get.accuracy(best.model)
+  
+  return( c(adj.r.sqr, best.rmse, best.acc) )
+}
+
+```
+
+\  
+
+```{r}
+
+best.model <- lm(log(income) ~ (state * log(income.cap)) + 
+                               (unemployment * poverty * log(income.cap)) +
+                               (log(income.pc.er) * log(income.er)) +
+                               white * black * asian,
+                 data = income.train.no.lev )
+
+results <- get.results(best.model)
+
+```
+
+\  
+
+- Adjusted $R^2$: $`r round(results[1], 2)`$
+- RMSE:           $`r results[2]`$
+- Accuracy:       $`r round(results[3], 2)`$
+
+\  
+
+### Model Diagnostics ~ Can Predictors in Model Explain the Response
+
+```{r, fig.align = "center"}
+
+# Function for Diagnostics
+diagnostics <- function(model)
+{
+  plot(fitted(best.model), resid(best.model), col = "dodgerblue",
+       xlab = "Fitted Values", ylab = "Residual Values", main = "Fitted vs Residual", pch = 20)
+  abline(h = 0, col = "darkorange")
+  
+  qqnorm(resid(model), col = "darkgrey", pch = 20)
+  qqline(resid(model), lty = 2, lwd = 2, col = "dodgerblue")
+}
+
+
+# Run and Plot Diagnostic Results
+par( mfrow = c(1, 2) )
+diagnostics(best.model)
+
+# Get p-value for Homoscedasticity
+p.value <- bptest(best.model)$p.value
+
+# Get p-value for normality
+best.model.resid <- resid(best.model)
+
+# Shapiro test function has a limit of 5000 records so we sample 4500 records from the residuals vector
+p.value2 <- shapiro.test(best.model.resid[sample(length(best.model.resid),4500)])$p.val
+
+```
+
+\  
+
+From the plots we can see that the equal variance assumption is suspect as well as the normality assumption. The suspicion of the equal variance assumption is reinforced by the small $p-value$ from the Breusch-Pagan test: $`r p.value`$. With such a small `p-value` we would reject $H_0$ that supports homoscedasticity in favor of $H_1$: the model is heteroscedastic.  
+
+Similarly, we see that Shapiro-Wilk normality test also returns a very low `p-value` of $p.value2$. Thus we reject $H_0$ for normality in favor of $H_1$: the model's normality assumption is suspect
+
+Based on this criteria, it is safe to claim that this model will be more useful for making predictions rather than having the predictor variables explaining the response variable.  
+
+\  
+
+# Results
+
+```{r, fig.align = "center"}
+
+par( mfrow = c(1, 1) )
+
+# Disable scientific notation while printing results
+options(scipen = 999) 
+
+
+# Function to Build Table
+get.results <- function(model)
+{
+  results_kable     <- matrix(nrow = 3, ncol = 1)
+  results_kable[1,] <- round(summary(model)$adj.r.square, 2) * 100
+  results_kable[2,] <- get.accuracy(best.model) 
+  results_kable[3,] <- get.test.rmse(best.model)
+  
+  return(results_kable)
+}
+
+
+# Run the Function
+kable.results            <- get.results(best.model)
+row.names(kable.results) <- c("Adjusted R-Square", "Accuracy", "RMSE")
+colnames(kable.results)  <- c("Test Model Evaluation Metrics")
+
+
+# Generate the Table
+kable(kable.results, caption = "Test Data Evaluation Metrics")
+
+
+# Plot Results
+plot(x = income.test$income, y = exp(predict(best.model, newdata = income.test)), 
+     main = "Actual vs Predicted \nMean Household Income", xlab = "Actual Income", ylab = "Predicted Income", col = "dodgerblue", pch = 20)
+lines(y = income.test$income, x = income.test$income, col = "orange")
+
+```
+
+\  
+
+The final model has the following characteristics:  
+
+- The model benefits from the removal of leverage points
+- The response variable `income` is transformed by $log()$; a Box-Cox transformation is not beneficial
+- The predictors `income.cap`, `income.pc.er`, and `income.er` are transformed by $log()$
+- There is an interaction between `state` and `income.cap`
+- There is an interaction between `unemployment`, `poverty`, and `income.cap`
+- There is an interaction between `income.pc.er` and `income.er`
+- There is an interaction between `white`, `black`, and `asian`
+- The predictors `men` and `total.pop` were found to be collinear, therefore omitted from fitting the best model
+- Although `income.cap` had been found to be collinear it was still used, and vital in the model's predictive performance
+- Although `state` for California and Texas had been found to be collinear, the decision to keep was based on not discriminating states for prediction
+
+\  
+
+# Discussion
+
+The diagnostics had the attributes of equal variance and collinearity being suspect, but the actual vs predicted plot shows that there is a linear relationship between. Based on the significance of the predictors, we can say that there seems to be a relation between `mean household income` and factors such as `income per capita`, `unemployment`, `poverty` and `race` (measured in terms of `white`, `black`, `asian` predictors). However, **it is important to note that this does not establish a causal relationship between the response and the predictors**. This is because the data is derived from observations from convenience sampling, which therefore means that the data cannot be generalized to a population.
+
+This model's predictors do not perform too well in explaining the response, but with predicted vs actual correlation of $`r round(results[3], 2)`$%, a LOOCV RMSE of $`r results[2]`$, and an adjusted $R^2$ of $`r round(results[1], 2)`$, this model does relatively well in predicting the mean household income for unseen data. And given this relatively favorable correlation, the initial intent of building this model can be addressed. 
+
+\  
+
+Targeting the same three examples mentioned in the **Introduction**:
+
+- The government can predict with a $`r round(results[3], 2)`$% correlation to segment the population into various income brackets, which can then be used for targeting government aid and assistance with more precision. This can ultimately optimize resources within the US economy that could work favorably for everyone in regard to the right segment of the population obtaining the right resources.  
+
+- Loan agencies can predict with a $`r round(results[3], 2)`$% correlation to understand future loaners better. They will be able to understand the income bracket should future requesters desire a home loan, student loan, bank loan, or any other financial aid and assistance popular within the US economy.  
+
+- Lastly, cities can predict with a $`r round(results[3], 2)`$% correlation the mean household income of their communities. This could help cities revisit taxing regulations to stimulate the economy and workforce. Cities can also have information the business owners would be attracted to. Businesses can gauge what kind of population makes up a city and decide if that economy is ideal for their business ventures.

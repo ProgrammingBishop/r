@@ -1,0 +1,775 @@
+---
+title: "Week 9 - Homework"
+author: "STAT 420, Summer 2018, sbishop3"
+date: ''
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+
+options(scipen = 1, digits = 4, width = 80)
+
+```
+
+
+
+## Exercise 1 (`longley` Macroeconomic Data)
+
+The built-in data set `longley` contains macroeconomic data for predicting employment. We will attempt to model the `Employed` variable.
+
+\  
+
+### A 
+##### What is the largest correlation between any pair of predictors in the dataset?
+
+```{r}
+
+corr <- cor(longley)
+
+indexes <- which(corr == 1)
+lrg.cor <- max(corr[-indexes])
+
+df       <- as.data.frame(cor(longley))
+cor.pred <- which(df == lrg.cor, arr.ind = T)
+
+```
+
+The largest correlation between any pairs of predictors is $`r lrg.cor`$, which involve the predictors $`r rownames(cor.pred)[1]`$ and $`r rownames(cor.pred)[2]`$.  
+
+\  
+
+### B 
+##### Fit a model with `Employed` as the response and the remaining variables as predictors. Calculate and report the variance inflation factor (VIF) for each of the predictors. Which variable has the largest VIF? Do any of the VIFs suggest multicollinearity?
+
+```{r}
+
+library(faraway)
+
+model        <- lm(Employed ~ ., data = longley)
+vif.result   <- vif(model)
+vif.max.pred <- names(which(vif.result == max(vif.result)))
+
+```
+ 
+GNP Deflator = $`r vif.result[1]`$  
+GNP          = $`r vif.result[2]`$  
+Unemployed   = $`r vif.result[3]`$  
+Armed Forces = $`r vif.result[4]`$  
+Population   = $`r vif.result[5]`$  
+Year         = $`r vif.result[6]`$  
+
+\  
+
+The variable with the largest VIF is $`r vif.max.pred`$ with a value of $`r max(vif.result)`$.  
+The VIFs that suggest multicollinearity involve the predictors: GNP Deflator, GNP, Unemployed, Population, and Year.  
+
+\  
+
+### C
+##### What proportion of the observed variation in `Population` is explained by a linear relationship with the other predictors?
+
+```{r}
+
+model <- lm(Population ~ . - Employed, data = longley)
+r.sqr <- summary(model)$r.squared
+
+```
+
+The proportion of the observed variation in `Population` explained with the relationship of the other predictors is $`r r.sqr`$.  
+
+\  
+
+### D
+##### Calculate the partial correlation coefficient for `Population` and `Employed` **with the effects of the other predictors removed**.
+
+```{r}
+
+model.1 <- lm(Employed   ~ . - Population, data = longley)
+model.2 <- lm(Population ~ . - Employed,   data = longley)
+pcc     <- cor(resid(model.1), resid(model.2))
+
+```
+
+The partial correlation coefficient for `Population` and `Employed` is $`r pcc`$.  
+
+\  
+
+### E
+##### Fit a new model with `Employed` as the response and the predictors from the model in **B** that were significant. (Use $\alpha = 0.05$.) Calculate and report the variance inflation factor for each of the predictors. Which variable has the largest VIF? Do any of the VIFs suggest multicollinearity?
+
+```{r}
+
+alpha <- 0.05
+
+model    <- lm(Employed ~ ., data = longley)
+sig.pred <- names(which(summary(model)$coefficients[ , "Pr(>|t|)"] < alpha))
+
+new.model <- lm(Employed ~ Unemployed + Armed.Forces + Year, data = longley)
+
+vif.result   <- vif(new.model)
+vif.max.pred <- names(which(vif.result == max(vif.result)))
+
+```
+
+The significant predictors are $`r sig.pred[2]`$, $`r sig.pred[3]`$ and $`r sig.pred[4]`$.   
+
+\  
+
+Unemployed   = $`r vif.result[1]`$  
+Armed Forces = $`r vif.result[2]`$  
+Year         = $`r vif.result[3]`$  
+
+\  
+
+The variable with the largest VIF is $`r vif.max.pred`$ with a value of $`r max(vif.result)`$.  
+None of the predictors suggest multicollinearity.  
+
+\  
+
+### F
+##### Use an $F$-test to compare the models in parts **B** and **E**. Report the following:
+
+```{r, echo = FALSE, warning = FALSE}
+
+anova.result <- anova(model, new.model)
+
+```
+
+##### The null hypothesis
+
+$H_0: \beta_1 = \beta_2 = \beta_3 = \beta_4 = \beta_5 = \beta_6 = \beta_7 = 0$ 
+
+\  
+
+##### The test statistic
+
+The test statistic is $`r anova.result[2, "F"]`$  
+
+\  
+
+##### The distribution of the test statistic under the null hypothesis
+
+```{r}
+
+df.1   <- nrow(longley) - 1
+df.2   <- nrow(longley) - length(coef(model))
+f.dist <- pf(1 - alpha, df1 = df.1, df2 = df.2)
+
+```
+
+The distribution of the f-statistic under the null hypothesis is $`r f.dist`$.    
+
+\  
+
+##### The p-value
+
+The p-value is $`r anova.result[2, "Pr(>F)"]`$  
+
+\  
+
+##### A decision
+
+Is the p-value less than an $\alpha = 0.05$: $`r anova.result[2, "Pr(>F)"] < alpha`$  
+We will fail to reject $H_0$.  
+
+\  
+
+##### Which model you prefer, **B** or **E**
+
+Based on the result of the f-test, it seems that model **B** is preferred.  
+
+\  
+
+### G
+##### Check the assumptions of the model chosen in part **F**. Do any assumptions appear to be violated?
+
+```{r, fig.align = "center"}
+
+plot_fitted_resid = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  plot(fitted(model), resid(model), 
+       col = pointcol, pch = 20, cex = 1.5,
+       xlab = "Fitted", ylab = "Residuals")
+  abline(h = 0, col = linecol, lwd = 2)
+}
+
+plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  qqnorm(resid(model), col = pointcol, pch = 20, cex = 1.5)
+  qqline(resid(model), col = linecol, lwd = 2)
+}
+
+par(mfrow = c(1, 2))
+
+plot_fitted_resid(model)
+plot_qq(model)
+
+```
+
+The fitted vs residuals plot seems to show equal variance. The normality of the data may not be as great as it could be based on the Q-Q Plot.  
+
+\  
+
+
+
+## Exercise 2 (`Credit` Data)
+
+For this exercise, use the `Credit` data from the `ISLR` package. Use the following code to remove the `ID` variable which is not useful for modeling.
+
+```{r, echo = FALSE, warnings = FALSE}
+
+library(leaps)
+library(ISLR)
+data(Credit)
+Credit = subset(Credit, select = -c(ID))
+
+```
+
+\  
+
+##### Evaluation Functions
+
+```{r, message = FALSE, warning = FALSE}
+
+library(lmtest)
+
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_sw_decision = function(model, alpha) {
+  print(shapiro.test(resid(model))$p.value)
+  decide = unname(shapiro.test(resid(model))$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_num_params = function(model) {
+  length(coef(model))
+}
+
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+
+get_adj_r2 = function(model) {
+  summary(model)$adj.r.squared
+}
+
+```
+
+\  
+
+### A
+Find a "good" model for `Balance` using the available predictors. Use any methods seen in class except transformations of the response. The model should:
+
+```{r, fig.align = "center"}
+
+model <- summary(regsubsets(Balance ~ ., data = Credit, nvmax = 11))
+
+# Obtain AIC/BIC Values
+mlr <- lm(Balance ~ ., data = Credit)
+p   <- length(coef(mlr))
+n   <- length(resid(mlr))
+
+
+# Find model with lowest AIC
+model.aic <- n * log(model$rss / n) + 2 * (2:p)
+indexes   <- which.min(model.aic)
+model$which[indexes, ]
+
+model.best.aic <- lm(Balance ~ Income + Limit + Rating + Cards + Age + Student, data = Credit)
+
+
+# Find model with lowest BIC
+model.bic <- n * log(model$rss / n) + log(n) * (2:p)
+indexes   <- which.min(model.bic)
+model$which[indexes, ]
+
+model.best.bic <- lm(Balance ~ Income + Limit + Cards + Student, data = Credit)
+
+
+# Choose AIC or BIC ~ AIC Model is better
+log(n) > 2
+extractAIC(model.best.aic)
+extractAIC(model.best.bic, k = log(n))
+
+
+# Remove Collinearity
+# New Model dropping Rating (Collinear with credit limit)
+df <- data.frame(Credit$Income, Credit$Limit, Credit$Rating, Credit$Cards, Credit$Age, Credit$Student)
+pairs(df, col = "dodgerblue")
+
+
+# Model transoforming Income becasue value range far greater than other numeric predictors
+mod_a <- lm(Balance ~ log(Income) + Limit + Cards * Age + Student, data = Credit)
+
+```
+
+\  
+
+##### Store your model in a variable called `mod_a`. Run the two given chunks to verify your model meets the requested criteria. If you cannot find a model that meets all criteria, partial credit will be given for meeting at least some of the criteria.
+
+\  
+
+##### Reach a LOOCV-RMSE below `135`
+
+$`r get_loocv_rmse(mod_a)`$  
+
+\  
+
+##### Obtain an adjusted $R^2$ above `0.91`
+
+$`r get_adj_r2(mod_a)`$  
+
+\  
+
+##### Fail to reject the Breusch-Pagan test with an $\alpha$ of $0.01$
+
+$`r get_bp_decision(mod_a, alpha = 0.01)`$  
+
+\  
+
+##### Use fewer than 25 $\beta$ parameters
+
+$`r get_num_params(mod_a)`$
+
+\  
+
+### B
+Find another "good" model for `balance` using the available predictors. Use any methods seen in class except transformations of the response. The model should:
+
+```{r}
+
+# Model from Previous example
+mod_b <- lm(Balance ~ log(Income) * Limit * Cards * Age + Student, data = Credit)
+
+```
+
+\  
+
+##### Store your model in a variable called `mod_b`. Run the two given chunks to verify your model meets the requested criteria. If you cannot find a model that meets all criteria, partial credit will be given for meeting at least some of the criteria.
+
+\  
+
+##### Reach a LOOCV-RMSE below `125`  
+
+$`r get_loocv_rmse(mod_b)`$
+
+\  
+
+##### Obtain an adjusted $R^2$ above `0.91`
+
+$`r get_adj_r2(mod_b)`$
+
+\  
+
+##### Fail to reject the Shapiro-Wilk test with an $\alpha$ of $0.01$
+
+$`r get_sw_decision(mod_b, alpha = 0.01)`$
+
+\  
+
+##### Use fewer than 25 $\beta$ parameters
+
+$`r get_num_params(mod_b)`$
+
+\  
+
+
+
+## Exercise 3 (`Sacramento` Housing Data)
+
+For this exercise, use the `Sacramento` data from the `caret` package. Use the following code to perform some preprocessing of the data.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+library(caret)
+library(ggplot2)
+data(Sacramento)
+sac_data = Sacramento
+sac_data$limits = factor(ifelse(sac_data$city == "SACRAMENTO", "in", "out"))
+sac_data = subset(sac_data, select = -c(city, zip))
+
+```
+
+\  
+
+Instead of using the `city` or `zip` variables that exist in the data set, we will simply create a variable (`limits`) indicating whether or not a house is technically within the city limits of Sacramento. (We do this because they would both be factor variables with a **large** number of levels. This is a choice that is made due to laziness, not necessarily because it is justified. Think about what issues these variables might cause.)  
+
+\  
+
+##### A plot of longitude versus latitude gives us a sense of where the city limits are.
+
+```{r, fig.align = "center"}
+
+qplot(y = longitude, x = latitude, data = sac_data,
+      col = limits, main = "Sacramento City Limits ")
+
+```
+
+\  
+
+After these modifications, we test-train split the data.
+
+```{r}
+
+set.seed(420)
+sac_trn_idx  = sample(nrow(sac_data), size = trunc(0.80 * nrow(sac_data)))
+sac_trn_data = sac_data[ sac_trn_idx, ]
+sac_tst_data = sac_data[-sac_trn_idx, ]
+
+```
+
+\  
+
+The training data should be used for all model fitting. Our goal is to find a model that is useful for predicting home prices.
+
+\  
+
+### A
+##### Find a "good" model for `price`. Use any methods seen in class. The model should reach a LOOCV-RMSE below 77,500 in the training data. Do not use any transformations of the response variable.
+
+```{r}
+
+model     <- lm(price ~ ., data = sac_trn_data)
+model.aic <- step(model, direction = "backward", trace = 0)
+model.bic <- step(model, direction = "backward", k = log(nrow(sac_trn_data)), trace = 0)
+
+new.model <- lm(price ~ beds * sqft * longitude, data = sac_trn_data)
+
+```
+
+
+```{r}
+
+get_loocv_rmse(new.model)
+
+```
+
+\  
+
+### B
+##### Is a model that achieves a LOOCV-RMSE below 77,500 useful in this case? That is, is an average error of 77,500 low enough when predicting home prices? To further investigate, use the held-out test data and your model from part **A** to do two things:
+
+\  
+
+##### Calculate the average percent error:
+
+\[
+\frac{1}{n}\sum_i\frac{|\text{predicted}_i - \text{actual}_i|}{\text{predicted}_i} \times 100
+\]
+
+```{r}
+
+predictions <- predict(new.model, sac_tst_data)
+
+error <- mean( abs(predictions - sac_tst_data$price) / predictions ) * 100
+
+```
+
+The average percent error is $`r error`$%.
+
+\  
+
+##### Plot the predicted versus the actual values and add the line $y = x$.
+
+```{r, fig.align = "center"}
+
+options(scipen = 999)
+
+fit <- lm(predictions ~ sac_tst_data$price)
+
+plot(y = predictions, x = sac_tst_data$price, col = "dodgerblue",
+     xlab = "Actual", ylab = "Predicted", main = "Actual vs Predicted Values")
+abline(fit, col = "darkorange")
+
+```
+
+\  
+
+##### Based on all of this information, argue whether or not this model is useful.
+
+```{r, fig.align = "center"}
+
+# Diagnostics (Equal Variance = No)
+plot(fitted(fit), resid(fit), col = "dodgerblue",
+     xlab = "Fitted Values", ylab = "Residual Values", 
+     main = "Fitted vs. Residuals")
+abline(h = 0, col = "darkorange")
+
+
+# Diagnostics (Normal Distribution = No)
+shapiro.test(resid(fit))
+
+```
+
+\  
+
+While successful predictions $`r 100 - error`$% of the time is not terrible, there are a few assumptions about the regression that have been violated. The predicted vs actual plot seems to follow a linear trend, but after viewing the fitted vs residual plot and running the Shapiro-Wilks test, the regression does not fulfill the expectations of equal variance and normal distribution. Based on these violations I would argue that the model as it stands is not useful, but perhaps some further transformations could be beneficial to fulfill the core assumptions.  
+
+\  
+
+
+
+## Exercise 4 (Does It Work?)
+
+In this exercise, we will investigate how well backwards AIC and BIC actually perform. For either to be "working" correctly, they should result in a low number of both **false positives** and **false negatives**. In model selection,
+
+##### **False Positive**, FP: Incorrectly including a variable in the model. Including a *non-significant* variable
+
+
+##### **False Negative**, FN: Incorrectly excluding a variable in the model. Excluding a *significant* variable
+
+\  
+
+Consider the **true** model
+
+\[
+Y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 x_3 + \beta_4 x_4 + \beta_5 x_5 + \beta_6 x_6 + \beta_7 x_7 + \beta_8 x_8 + \beta_9 x_9 + \beta_{10} x_{10} + \epsilon
+\]
+
+where $\epsilon \sim N(0, \sigma^2 = 4)$. The true values of the $\beta$ parameters are given in the `R` code below.
+
+```{r}
+
+beta_0  = 1
+beta_1  = -1
+beta_2  = 2
+beta_3  = -2
+beta_4  = 1
+beta_5  = 1
+beta_6  = 0
+beta_7  = 0
+beta_8  = 0
+beta_9  = 0
+beta_10 = 0
+sigma = 2
+
+```
+
+\  
+
+Then, as we have specified them, some variables are significant, and some are not. We store their names in `R` variables for use later.
+
+```{r}
+
+not_sig  = c("x_6", "x_7", "x_8", "x_9", "x_10")
+signif = c("x_1", "x_2", "x_3", "x_4", "x_5")
+
+```
+
+\  
+
+We now simulate values for these `x` variables, which we will use throughout part **A**.
+
+```{r}
+
+set.seed(420)
+n = 100
+x_1  = runif(n, 0, 10)
+x_2  = runif(n, 0, 10)
+x_3  = runif(n, 0, 10)
+x_4  = runif(n, 0, 10)
+x_5  = runif(n, 0, 10)
+x_6  = runif(n, 0, 10)
+x_7  = runif(n, 0, 10)
+x_8  = runif(n, 0, 10)
+x_9  = runif(n, 0, 10)
+x_10 = runif(n, 0, 10)
+
+```
+
+\  
+
+We then combine these into a data frame and simulate `y` according to the true model.
+
+```{r}
+
+sim_data_1 = data.frame(x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8, x_9, x_10,
+  y = beta_0 + beta_1 * x_1 + beta_2 * x_2 + beta_3 * x_3 + beta_4 * x_4 + 
+      beta_5 * x_5 + rnorm(n, 0 , sigma)
+)
+
+```
+
+\  
+
+We do a quick check to make sure everything looks correct.
+
+```{r}
+
+head(sim_data_1)
+
+```
+
+\  
+
+Now, we fit an incorrect model.
+
+```{r}
+
+fit = lm(y ~ x_1 + x_2 + x_6 + x_7, data = sim_data_1)
+coef(fit)
+
+```
+
+\  
+
+Notice, we have coefficients for `x_1`, `x_2`, `x_6`, and `x_7`. This means that `x_6` and `x_7` are false positives, while `x_3`, `x_4`, and `x_5` are false negatives.
+
+To detect the false negatives, use:
+
+```{r}
+
+# which are false negatives?
+!(signif %in% names(coef(fit)))
+
+```
+
+\  
+
+To detect the false positives, use:
+
+```{r}
+
+# which are false positives?
+names(coef(fit)) %in% not_sig
+
+```
+
+\  
+
+##### Function to Generate Kable
+
+```{r}
+
+library(knitr)
+
+create.kable <- function()
+{
+  aic.fneg <- sum(f.negs[ , "AIC"]) / 300
+  bic.fneg <- sum(f.negs[ , "BIC"]) / 300
+  
+  aic.fpos <- sum(f.posi[ , "AIC"]) / 300
+  bic.fpos <- sum(f.posi[ , "BIC"]) / 300
+  
+  df <- data.frame( 'AIC'     = c(aic.fneg, aic.fpos),
+                    'BIC'     = c(bic.fneg, bic.fpos),
+                    row.names = c("False Negative", "False Positive") )
+  
+  kable( df, digits = 6, align = 'r',
+         col.names = c( 'AIC', 'BIC' ) )
+}
+
+```
+
+\  
+
+### A
+Set a seed equal to your birthday; then, using the given data for each `x` variable above in `sim_data_1`, simulate the response variable `y` 300 times. Each time,
+
+```{r}
+
+set.seed(19920917)
+
+iters  <- 300
+f.negs <- data.frame( "AIC" = rep(0, iters), "BIC" = rep(0, iters))
+f.posi <- data.frame( "AIC" = rep(0, iters), "BIC" = rep(0, iters))
+
+for (i in 1:iters)
+{
+  sim_data_1$y <- beta_0 + beta_1 * x_1 + beta_2 * x_2 + beta_3 * x_3 + 
+                  beta_4 * x_4 + beta_5 * x_5 + rnorm(n, 0 , sigma)
+  model <- lm(y ~ ., data = sim_data_1)
+  
+  model.aic        <- step(model, direction = "backward", trace = 0)
+  f.negs[i, "AIC"] <- sum(!(signif %in% names(coef(model.aic))))
+  f.posi[i, "AIC"] <- sum(names(coef(model.aic)) %in% not_sig)
+  
+  model.bic        <- step(model, direction = "backward", k = log(nrow(sim_data_1)), trace = 0)
+  f.negs[i, "BIC"] <- sum(!(signif %in% names(coef(model.bic))))
+  f.posi[i, "BIC"] <- sum(names(coef(model.bic)) %in% not_sig)
+}
+
+```
+
+\  
+
+Calculate the rate of false positives and negatives for both AIC and BIC. Compare the rates between the two methods. Arrange your results in a well formatted table.
+
+```{r}
+
+create.kable()
+
+```
+
+\  
+
+### B
+Set a seed equal to your birthday; then, using the given data for each `x` variable below in `sim_data_2`, simulate the response variable `y` 300 times.
+
+```{r}
+
+set.seed(420)
+
+x_1  = runif(n, 0, 10)
+x_2  = runif(n, 0, 10)
+x_3  = runif(n, 0, 10)
+x_4  = runif(n, 0, 10)
+x_5  = runif(n, 0, 10)
+x_6  = runif(n, 0, 10)
+x_7  = runif(n, 0, 10)
+x_8  = x_1 + rnorm(n, 0, 0.1)
+x_9  = x_1 + rnorm(n, 0, 0.1)
+x_10 = x_2 + rnorm(n, 0, 0.1)
+
+sim_data_2 = data.frame(x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8, x_9, x_10,
+  y = beta_0 + beta_1 * x_1 + beta_2 * x_2 + beta_3 * x_3 + beta_4 * x_4 + 
+      beta_5 * x_5 + rnorm(n, 0 , sigma)
+)
+
+```
+
+```{r}
+
+set.seed(19920917)
+
+iters  <- 300
+f.negs <- data.frame( "AIC" = rep(0, iters), "BIC" = rep(0, iters))
+f.posi <- data.frame( "AIC" = rep(0, iters), "BIC" = rep(0, iters))
+
+for (i in 1:iters)
+{
+  sim_data_2$y <- beta_0 + beta_1 * x_1 + beta_2 * x_2 + beta_3 * x_3 + 
+                  beta_4 * x_4 + beta_5 * x_5 + rnorm(n, 0 , sigma)
+  model <- lm(y ~ ., data = sim_data_2)
+  
+  model.aic        <- step(model, direction = "backward", trace = 0)
+  f.negs[i, "AIC"] <- sum(!(signif %in% names(coef(model.aic))))
+  f.posi[i, "AIC"] <- sum(names(coef(model.aic)) %in% not_sig)
+  
+  model.bic        <- step(model, direction = "backward", k = log(nrow(sim_data_1)), trace = 0)
+  f.negs[i, "BIC"] <- sum(!(signif %in% names(coef(model.bic))))
+  f.posi[i, "BIC"] <- sum(names(coef(model.bic)) %in% not_sig)
+}
+
+```
+
+\  
+
+##### Calculate the rate of false positives and negatives for both AIC and BIC. Compare the rates between the two methods. Arrange your results in a well formatted table. Also compare to your answers in part **A** and suggest a reason for any differences.
+
+```{r}
+
+create.kable()
+
+```
+
+\  
+
+The reason there is a significantly higher rate of false negatives and false positives using `sim_data_2` is because there are some feature vectors that are linear combinations of other feature vectors and therefore dependent (repetitious). False Negatives is higher because the significant variables can be mistaken as insignificant variables due to the dependency. The same is true for False Positives with the insignificant variables; they can be mistaken as significant variables.
