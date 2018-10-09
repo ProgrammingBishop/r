@@ -1,5 +1,6 @@
 ---
-title:  "Untitled"
+title:  "Project 1 4042 sbishop3"
+author: "Scott Bishop"
 output: pdf_document
 editor_options: 
   chunk_output_type: console
@@ -9,35 +10,11 @@ editor_options:
 
 - In addition, report the accuracy (see evaluation metric given below), running time of your code and the computer system you use (e.g., Macbook Pro, 2.53 GHz, 4GB memory, or AWS t2.large). You DO NOT need to submit the part of the code related to the evaluation you conduct.
 
+- Build TWO prediction models. Always include a tree-based ensemble model, e.g., randomForest, and/or boosting tree. 
 
-Build TWO prediction models. Always include a tree-based ensemble model, e.g., randomForest, and/or boosting tree. 
+- After running your Rcode, we should see TWO txt files in the same directory named "mysubmission1.txt" and "mysubmission2.txt". Each submission file correspoonds to a prediction on the test data.
 
-
-After running your Rcode, we should see TWO txt files in the same directory named "mysubmission1.txt" and "mysubmission2.txt". Each submission file correspoonds to a prediction on the test data.
-
-
-After running your R code, we should see three .txt files in the same directory named mysubmission1.txt, mysubmission2.txt, and mysubmission3.txt. Each submission file corresponds to a prediction on the test data.
-
-Submission File Format. The file should have the following format (do not forget the comma between PID and Sale_Price):
-PID,  Sale_Price 
-528221060,  169000.7 
-535152150,  14523.6 
-533130020,  195608.2
-
-For each of your two models, prediction error is calculated as the averaged RMSE over 3 splits. Full credit if one of the two errors is below 0.132 and extra credit if below 0.120
-
-
-Remove variables "Longitude'' and "Latitude''.
-
-Remove categorical variables that contain one "dominating" category. For example, we remove variable Street, as 99.6% samples take the value Pave. Such variables do not capture much variation of samples and may cause issues in cross-validation.
-
-Winsorization. Specifically, substitute 95% (or 5%) percentile for the data above 95% (or below 5%) percentile. Winsorization is a transformation technique to limit extreme values and reduce the effect of potential outliers. 
-
-Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
-
-The two methods can be the same algorithm with two sets of parameters (i.e., XGboost with two sets of tuning parameters)
-
-
+- For each of your two models, prediction error is calculated as the averaged RMSE over 3 splits. Full credit if one of the two errors is below 0.132 and extra credit if below 0.120
 
 ```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
 
@@ -49,6 +26,22 @@ set.seed(4042)
 
 ```
 
+```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
+
+# Install Packages
+# ==================================================
+packages <- c("DescTools")   
+init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
+
+if ( length(init.pkg) > 0 ) 
+{
+    install.packages(init.pkg)
+} 
+
+lapply(packages, require, character.only = TRUE)
+
+```
+
 
 
 
@@ -57,7 +50,7 @@ set.seed(4042)
 # Partition Function
 # ==================================================
 
-split <- function(data)
+make.split <- function(data)
 {
     indexes <- sample( seq_len(nrow(data)), 
                        size = round(nrow(data) * 0.70) )
@@ -72,7 +65,7 @@ split <- function(data)
                  "test.y" = test.csv.y) )
 }
 
-split <- split(ames)
+split <- make.split(ames)
 
 ```
 
@@ -100,10 +93,90 @@ evaluate <- function(test.y)
 save.output <- function(predictions, number)
 {
   write.table(predictions, file = paste( "mysubmission", number, ".txt", sep = "" ), sep = ", ",
-              row.names = FALSE, col.names = c( "PID", "True_Sale_Price" )  )
+              row.names = FALSE, col.names = c( "PID", "Sale_Price" )  )
 }
 
 ```
+
+
+
+TIPS
+
+Winsorization. Specifically, substitute 95% (or 5%) percentile for the data above 95% (or below 5%) percentile. Winsorization is a transformation technique to limit extreme values and reduce the effect of potential outliers. 
+
+Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
+
+The two methods can be the same algorithm with two sets of parameters (i.e., XGboost with two sets of tuning parameters)
+
+
+```{r}
+
+# Preprocessing
+# ==================================================
+
+# Find Majority Factor Function
+get.maj.factors <- function(vars, thresh)
+{
+  vars.to.remove <- character()
+  denominator    <- nrow(split$train)
+  
+  # For Each Factor Variable
+  for ( var in 1:length(vars) )
+  {
+    # And For Each Level of Current Factor Variable
+    for ( level in 1:length( table(vars[[var]]) ) )
+    {
+      # Calculate it's Proportion of Rows
+      numerator  <- table( vars[[var]] )[[level]]
+      maj.factor <- numerator / denominator
+      
+      # If this Level has 95% Majority, Flag it For Removal
+      if ( maj.factor >= thresh )
+      {
+        vars.to.remove[ length(vars.to.remove) + 1 ] <- names(factor.vars[var])
+        level <- length( table(vars[[var]]) )
+      }
+    }
+  }
+  
+  return(vars.to.remove)
+}
+
+
+# -------------------------
+
+# Remove Longitude and Latitude
+split$train <- split$train[, -c(81, 82)]
+
+# Identify & Remove Majority Factors Variables
+factor.vars  <- split$train[, sapply(split$train, is.factor) ]
+drop.columns <- get.maj.factors(factor.vars, 0.95)
+split$train  <- split$train[, !( names(split$train) %in% drop.columns ) ]
+
+```
+
+```{r}
+
+# Refactorize Overall_QUal
+# ==================================================
+
+levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_Poor", "Poor", "Fair",  "Below_Average" ) ]  <- "low"
+levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Average",   "Above_Average", "Good" ) ]           <- "avg"
+levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_Good", "Excellent",     "Very_Excellent" ) ] <- "high"
+
+```
+
+
+
+
+```{r}
+
+# Winsorization
+summary(split$train)
+split$train <- Winsorize( split$train, minval = NULL, maxval = NULL, probs = c(0.05, 0.95),  na.rm = FALSE )
+
+```
+
 
 
 
