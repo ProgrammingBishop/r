@@ -1,10 +1,20 @@
 ---
 title:  "Untitled"
 output: pdf_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 - A report - 3 pages maximum, .pdf only, that provides the details of your code, e.g., pre-processing, some technical details or implementation details (if not trivial) of the models you use, etc.
+
 - In addition, report the accuracy (see evaluation metric given below), running time of your code and the computer system you use (e.g., Macbook Pro, 2.53 GHz, 4GB memory, or AWS t2.large). You DO NOT need to submit the part of the code related to the evaluation you conduct.
+
+
+Build TWO prediction models. Always include a tree-based ensemble model, e.g., randomForest, and/or boosting tree. 
+
+
+After running your Rcode, we should see TWO txt files in the same directory named "mysubmission1.txt" and "mysubmission2.txt". Each submission file correspoonds to a prediction on the test data.
+
 
 After running your R code, we should see three .txt files in the same directory named mysubmission1.txt, mysubmission2.txt, and mysubmission3.txt. Each submission file corresponds to a prediction on the test data.
 
@@ -16,6 +26,7 @@ PID,  Sale_Price
 
 For each of your two models, prediction error is calculated as the averaged RMSE over 3 splits. Full credit if one of the two errors is below 0.132 and extra credit if below 0.120
 
+
 Remove variables "Longitude'' and "Latitude''.
 
 Remove categorical variables that contain one "dominating" category. For example, we remove variable Street, as 99.6% samples take the value Pave. Such variables do not capture much variation of samples and may cause issues in cross-validation.
@@ -23,6 +34,10 @@ Remove categorical variables that contain one "dominating" category. For example
 Winsorization. Specifically, substitute 95% (or 5%) percentile for the data above 95% (or below 5%) percentile. Winsorization is a transformation technique to limit extreme values and reduce the effect of potential outliers. 
 
 Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
+
+The two methods can be the same algorithm with two sets of parameters (i.e., XGboost with two sets of tuning parameters)
+
+
 
 ```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
 
@@ -34,9 +49,12 @@ set.seed(4042)
 
 ```
 
+
+
+
 ```{r, warning = FALSE, echo = FALSE, message = FALSE}
 
-# Partition the Data
+# Partition Function
 # ==================================================
 
 split <- function(data)
@@ -58,19 +76,37 @@ split <- split(ames)
 
 ```
 
-```{r}
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
 
 # Evaluation Function
+# ==================================================
+
 evaluate <- function(test.y) 
 {
-  predictions      <- read.csv("mysubmission1.csv")
+  pred             <- read.csv("mysubmission1.txt")
   names(test.y)[2] <- "True_Sale_Price"
-  predictions      <- merge(pred, test.y, by = "PID")
+  pred             <- merge(pred, test.y, by = "PID")
   
   sqrt( mean( ( log(pred$Sale_Price) - log(pred$True_Sale_Price) ) ^ 2 ) )
 }
 
 ```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Save Output Function
+# ==================================================
+
+save.output <- function(predictions, number)
+{
+  write.table(predictions, file = paste( "mysubmission", number, ".txt", sep = "" ), sep = ", ",
+              row.names = FALSE, col.names = c( "PID", "True_Sale_Price" )  )
+}
+
+```
+
+
+
 
 ```{r}
 
@@ -81,6 +117,16 @@ evaluate <- function(test.y)
 
 ```{r}
 
+# Model 1 Predictions Output
+# ==================================================
+
+```
+
+
+
+
+```{r}
+
 # Model 2
 # ==================================================
 
@@ -88,10 +134,7 @@ evaluate <- function(test.y)
 
 ```{r}
 
-# Model 3
+# Model 1 Predictions Output
 # ==================================================
 
 ```
-
-
-
