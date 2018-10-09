@@ -1,0 +1,536 @@
+---
+title:  "Assignment 2 4042 sbishop3"
+author: "Scott Bishop"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
+
+# Set Up Environment
+# ==================================================
+setwd("D:\\Documents\\Assignment_2_4042_sbishop3")
+set.seed(4042)
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
+
+# Install Packages
+# ==================================================
+packages <- c("glmnet")   
+init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
+
+if ( length(init.pkg) > 0 ) 
+{
+    install.packages(init.pkg)
+} 
+
+lapply(packages, require, character.only = TRUE)
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Load Data
+# ==================================================
+load("./data/BostonHousing1.Rdata")
+load("./data/BostonHousing2.Rdata")
+load("./data/BostonHousing3.Rdata")
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Part 1
+# ==================================================
+# Functions
+split <- function(data)
+{
+    indexes <- sample( seq_len(nrow(data)), 
+                       size = round(nrow(data) * 0.75) )
+
+    train <- as.numeric( rownames(data[ indexes, ]) )
+    test  <- as.numeric( rownames(data[-indexes, ]) )
+    
+    return( list("train" = train,
+                 "test"  = test) )
+}
+
+
+fit.full.model <- function(data, split)
+{
+    model       <- lm( Y ~ ., data[split$train, ] )
+    predictions <- predict( model, data[split$test, ] )
+    
+    return( mean( ( data[split$test, 1] - predictions ) ^ 2 ) )
+}
+
+
+fit.aic <- function(data, split, step)
+{
+    model     <- lm(Y ~ ., data[split$train, ])
+    model.aic <- 0
+    
+    if (step == 1) 
+    {
+        model.aic <- step( lm(Y ~ 1, data[split$train, ]), 
+                           list(upper = model),
+                           trace = 0, direction = "forward")
+    } 
+    
+    else 
+    {
+        model.aic = step(model, trace = 0, direction = "backward")
+    }
+    
+    predictions  <- predict(model.aic, data[split$test, ]) 
+    
+    model.length <- length(model.aic$coef) - 1
+    model.mspe   <- mean( ( data[split$test, 1] - predictions ) ^ 2 )
+    
+    return( list("Length" = model.length,
+                 "MSPE"   = model.mspe) )
+}
+
+
+fit.bic <- function(data, split, step)
+{
+    model     <- lm(Y ~ ., data[split$train, ])
+    model.bic <- 0
+    
+    if (step == 1) 
+    {
+        model.bic <- step( lm(Y ~ 1, data[split$train, ]),
+                           list(upper = model),
+                           trace = 0, direction = "forward", k = log(nrow(data[split$train, ])) )
+    } 
+    
+    else 
+    {
+        model.bic <- step( model, trace = 0,
+                           direction = "backward", k = log(nrow(data[split$train, ])) )
+    }
+    
+    predictions <- predict(model.bic, data[split$test, ])
+    
+    model.length <- length(model.bic$coef) - 1
+    model.mspe   <- mean( ( data[split$test, 1] - predictions ) ^ 2 )
+    
+    return( list("Length" = model.length,
+                 "MSPE"   = model.mspe) )
+}
+
+
+get.xy.matrix <- function(data, split)
+{
+    return( list( "Train_X" = as.matrix(data[split$train, -1]), 
+                  "Train_Y" = as.matrix(data[split$train,  1]),
+                  "Test_X"  = as.matrix(data[split$test,  -1]), 
+                  "Test_Y"  = as.matrix(data[split$test,   1]) ) )
+}
+
+
+fit.ridge <- function(data, split, start.time, lambda.vals = NULL)
+{
+    xy.mats <- get.xy.matrix(data, split)
+    
+    model.cv    <- cv.glmnet( as.matrix(xy.mats$Train_X), as.matrix(xy.mats$Train_Y), alpha = 0, lambda = lambda.vals )
+    best.lambda <- model.cv$lambda.min
+    predictions <- predict( model.cv, s = best.lambda, newx = as.matrix(xy.mats$Test_X) )
+    
+    model.mspe <- mean( ( xy.mats$Test_Y - predictions ) ^ 2 )
+    model.time <- proc.time()[[3]] - start.time
+    
+    n <- nrow(data) - nrow(xy.mats$Test_X)
+    t <- scale(xy.mats$Train_X) * sqrt( n / (n - 1) )
+    d <- svd(t)$d 
+    
+    best.lambda      <- model.cv$lambda.min
+    model.effect.min <- sum( d ^ 2 / ( d ^ 2 + (best.lambda * n) ) )
+    
+    best.lambda      <- model.cv$lambda.1se
+    model.effect.1se <- sum( d ^ 2 / ( d ^ 2 + (best.lambda * n) ) )
+    
+    return( list("Effect_Min" = model.effect.min,
+                 "Effect_1se" = model.effect.1se,
+                 "MSPE"       = model.mspe,
+                 "Time"       = model.time) )
+}
+
+
+fit.lasso <- function(data, split, lambda.vals = NULL)
+{
+    xy.mats <- get.xy.matrix(data, split)
+    
+    model.cv    <- cv.glmnet( as.matrix(xy.mats$Train_X), as.matrix(xy.mats$Train_Y), alpha = 1, lambda = lambda.vals )
+    best.lambda <- model.cv$lambda.min
+    predictions <- predict( model.cv, s = best.lambda, newx = as.matrix(xy.mats$Test_X) )
+    
+    model.mspe <- mean( (predictions - xy.mats$Test_Y) ^ 2 )
+    
+    lasso.coef   <- predict(model.cv, s = best.lambda, type = "coefficients")
+    model.length <- sum(lasso.coef != 0) - 1 
+    
+    return( list("Length" = model.length,
+                 "MSPE"   = model.mspe) )
+}
+
+
+fit.lasso.1se <- function(data, split, lambda.vals = NULL)
+{
+    xy.mats <- get.xy.matrix(data, split)
+    
+    model.cv    <- cv.glmnet( as.matrix(xy.mats$Train_X), as.matrix(xy.mats$Train_Y), alpha = 1, lambda = lambda.vals )
+    best.lambda <- model.cv$lambda.1se
+    predictions <- predict( model.cv, s = best.lambda, newx = as.matrix(xy.mats$Test_X) )
+    
+    model.mspe <- mean( ( predictions - xy.mats$Test_Y ) ^ 2 )
+    
+    lasso.coef   <- predict(model.cv, s = best.lambda, type = "coefficients")
+    model.length <- sum(lasso.coef != 0) - 1 
+    
+    return( list("Length" = model.length,
+                 "MSPE"   = model.mspe) )
+}
+
+
+refit.lasso.1se <- function(data, split, lambda.vals = NULL)
+{
+    data.x  <- as.matrix(data[ , -1])
+    xy.mats <- get.xy.matrix(data, split)
+    
+    model.cv    <- cv.glmnet( as.matrix(xy.mats$Train_X), as.matrix(xy.mats$Train_Y), alpha = 1, lambda = lambda.vals )
+    best.lambda <- model.cv$lambda.1se
+    lasso.coef  <- predict(model.cv, s = best.lambda, type = "coefficients")
+    
+    v <- row.names(lasso.coef)[ nonzeroCoef(lasso.coef)[-1] ]
+    t <- data.x[ , colnames(data.x) %in% v]
+    
+    refit <- coef( lm( xy.mats$Train_Y ~ t[as.numeric( rownames(xy.mats$Train_X) ), ] ) )
+    
+    predictions <- refit[1] + t[as.numeric( rownames(xy.mats$Test_X) ), ] %*% refit[-1]
+    
+    model.mspe   <- mean( (predictions - xy.mats$Test_Y) ^ 2 )
+    model.length <- sum(lasso.coef != 0) - 1 
+    
+    return( list("Length" = model.length,
+                 "MSPE"   = model.mspe) )
+}
+
+
+get.lambda.ridge <- function(data, y.limit)
+{
+    lambda.matrix <- matrix( 0, nrow = 50, ncol = 4 )
+    
+    for (i in 1:50)
+    {
+        the.split <- split(data)
+        the.split <- get.xy.matrix( data, the.split )
+        model.cv  <- cv.glmnet( as.matrix(the.split$Train_X), 
+                                as.matrix(the.split$Train_Y), alpha = 0 )
+        
+        lambda.matrix[i, 1] <- min(model.cv$lambda)
+        lambda.matrix[i, 2] <- max(model.cv$lambda)
+        lambda.matrix[i, 3] <- model.cv$lambda.min
+        lambda.matrix[i, 4] <- model.cv$lambda.1se
+    }
+    
+    lambda.matrix <- log(lambda.matrix)
+    
+    plot (lambda.matrix[ , 1], type = "l", col = "red", ylim = y.limit, main = "Ridge") # Min
+    lines(lambda.matrix[ , 2], type = "l", col = "blue")   # Max
+    lines(lambda.matrix[ , 3], type = "l", col = "orange") # L Min
+    lines(lambda.matrix[ , 4], type = "l", col = "green")  # L 1se
+}
+
+
+get.lambda.lasso <- function(data, y.limit)
+{
+    lambda.matrix <- matrix( 0, nrow = 50, ncol = 4 )
+    
+    for (i in 1:50)
+    {
+        the.split <- split(data)
+        the.split <- get.xy.matrix( data, the.split )
+        model.cv  <- cv.glmnet( as.matrix(the.split$Train_X), 
+                                as.matrix(the.split$Train_Y), alpha = 1 )
+        
+        lambda.matrix[i, 1] <- min(model.cv$lambda)
+        lambda.matrix[i, 2] <- max(model.cv$lambda)
+        lambda.matrix[i, 3] <- model.cv$lambda.min
+        lambda.matrix[i, 4] <- model.cv$lambda.1se
+    }
+    
+    lambda.matrix <- log(lambda.matrix)
+    
+    plot (lambda.matrix[ , 1], type = "l", col = "red", ylim = y.limit, main = "Lasso") # Min
+    lines(lambda.matrix[ , 2], type = "l", col = "blue")   # Max
+    lines(lambda.matrix[ , 3], type = "l", col = "orange") # L Min
+    lines(lambda.matrix[ , 4], type = "l", col = "green")  # L 1se
+}
+
+
+c1 <- rainbow(10)
+c2 <- rainbow(10, alpha = 0.2)
+c3 <- rainbow(10, v = 0.7)
+
+make.boxplot <- function(the.data, y.label, title)
+{
+    boxplot( x = the.data, names = x.labels, 
+             col = c2, medcol = c3, whiskcol = c1, staplecol = c3, 
+             boxcol = c3, outcol = c3, pch = 23, cex = 2, 
+             ylab = y.label, xlab = "Procedure", main = title )
+}
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Part 1
+# ==================================================
+mspe.mat      <- matrix(0, nrow = 50, ncol = 10)
+mod.size.mat  <- matrix(0, nrow = 50, ncol = 10)
+runtime.mat   <- matrix(0, nrow = 50, ncol = 10)
+iterations    <- 50
+
+# get.lambda.ridge(Housing1, c(0, -9))
+# get.lambda.lasso(Housing1, c(0, -9))
+
+lambda.values.r <- NULL
+lambda.values.l <- c( exp(-5.5), exp(-6.0), exp(-6.5),
+                      exp(-7.0), exp(-7.5), exp(-7.75))
+
+for (i in 1:iterations)
+{
+    the.split <- split(Housing1)
+    
+    # Fit Full Model
+    start.time         <- proc.time()[[3]]
+    mspe.mat    [i, 1] <- fit.full.model(Housing1, the.split)
+    mod.size.mat[i, 1] <- ncol(Housing1 - 1)
+    runtime.mat [i, 1] <- proc.time()[[3]] - start.time
+    
+    # Fit Forward & Backward AIC
+    start.time         <- proc.time()[[3]]
+    model.aic          <- fit.aic(Housing1, the.split, 1)
+    mspe.mat    [i, 2] <- model.aic$MSPE
+    mod.size.mat[i, 2] <- model.aic$Length
+    runtime.mat [i, 2] <- proc.time()[[3]] - start.time
+    
+    start.time         <- proc.time()[[3]]
+    model.aic          <- fit.aic(Housing1, the.split, 0)
+    mspe.mat    [i, 3] <- model.aic$MSPE
+    mod.size.mat[i, 3] <- model.aic$Length
+    runtime.mat [i, 3] <- proc.time()[[3]] - start.time
+    
+    # Fit Forward & Backward BIC
+    start.time         <- proc.time()[[3]]
+    model.bic          <- fit.bic(Housing1, the.split, 1)
+    mspe.mat    [i, 4] <- model.bic$MSPE
+    mod.size.mat[i, 4] <- model.bic$Length
+    runtime.mat [i, 4] <- proc.time()[[3]] - start.time
+    
+    start.time         <- proc.time()[[3]]
+    model.bic          <- fit.bic(Housing1, the.split, 0)
+    mspe.mat    [i, 5] <- model.bic$MSPE
+    mod.size.mat[i, 5] <- model.bic$Length
+    runtime.mat [i, 5] <- proc.time()[[3]] - start.time
+    
+    # Fit Ridge Min & Ridge 1se
+    start.time         <- proc.time()[[3]]
+    model.ridge        <- fit.ridge(Housing1, the.split, start.time, lambda.values.r)
+    mspe.mat    [i, 6] <- model.ridge$MSPE
+    mod.size.mat[i, 6] <- model.ridge$Effect_Min
+    runtime.mat [i, 6] <- model.ridge$Time
+    
+    mspe.mat    [i, 7] <- model.ridge$MSPE
+    mod.size.mat[i, 7] <- model.ridge$Effect_1se
+    runtime.mat [i, 7] <- model.ridge$Time
+    
+    # Fit Lasso Min & Lasso 1se
+    start.time         <- proc.time()[[3]]
+    model.lasso        <- fit.lasso(Housing1, the.split, lambda.values.l)
+    mspe.mat    [i, 8] <- model.lasso$MSPE
+    mod.size.mat[i, 8] <- model.lasso$Length
+    runtime.mat [i, 8] <- proc.time()[[3]] - start.time
+    
+    # Refit Best Model with Lasso 1se
+    start.time         <- proc.time()[[3]]
+    model.1se          <- fit.lasso.1se(Housing1, the.split, lambda.values.l)
+    mspe.mat    [i, 9] <- model.1se$MSPE
+    mod.size.mat[i, 9] <- model.1se$Length
+    runtime.mat [i, 9] <- proc.time()[[3]] - start.time
+    
+    start.time          <- proc.time()[[3]]
+    model.refit         <- refit.lasso.1se(Housing1, the.split, lambda.values.l)
+    mspe.mat    [i, 10] <- model.refit$MSPE
+    mod.size.mat[i, 10] <- model.refit$Length
+    runtime.mat [i, 10] <- proc.time()[[3]] - start.time
+} 
+
+```
+
+Each set of plots are generated from one of three datasets, each differing from one another through the inclusion of an increasing number of predictor variables. Each boxplot represents 50 iterations using the process listed under that boxplot in question. For Ridge and Lasso calculations a sequence of 6 $\lambda$ values is selected by running `cv.glmnet` for 50 iterations using $\alpha = 0$ for Ridge and $\alpha = 1$ for Lasso. A new sequence is generated for each dataset, and the sequence is chosen from plotting $\lambda_{min}$, $\lambda_{max}$, $cv.glmnet_{fit}\$lambda.min$, and $cv.glmnet_{fit}\$lambda.1se$ and selecting the optimum values. This selected sequence is then used for all 50 iterations to generate the boxplots for a target dataset. The Run Time table is generated from calculating the time each process takes. A matrix is constructed to record the runtime for each iteration of the 50 for each process and then summed together to record the total processing time. This time is recorded using `proc.time()[[3]]`.
+
+```{r, warning = FALSE, echo = FALSE, fig.align = "center", fig.width = 10, fig.height = 6}
+
+# Plot the Data
+x.labels <- c("Full",  "AIC.F", "AIC.B", "BIC.F", "BIC.B",
+              "R_min", "R_1se", "L_min", "L_1se", "L_refit")
+
+par( mfrow = c(2, 1) )
+
+make.boxplot(mspe.mat,     "MSPE",       "Boston 1 MSPE")
+make.boxplot(mod.size.mat, "Model Size", "Boston 1 Model Size")
+
+rtime <- as.data.frame( colSums(runtime.mat) )
+rownames(rtime) <- c( "Full",      "AIC F",     "AIC B",     "BIC F",      "BIC B",
+                      "Ridge Min", "Ridge 1se", "Lasso Min", "Lasson 1se", "Lasso Refit" )
+colnames(rtime) <- "Run Time"
+t(rtime)
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Part 2
+# ==================================================
+mspe.mat      <- matrix(0, nrow = 50, ncol = 5)
+mod.size.mat  <- matrix(0, nrow = 50, ncol = 5)
+runtime.mat   <- matrix(0, nrow = 50, ncol = 5)
+iterations    <- 50
+
+# get.lambda.ridge(Housing2, c(0, -9))
+# get.lambda.lasso(Housing2, c(0, -10))
+
+lambda.values.r <- NULL
+lambda.values.l <- c( exp(-6), exp(-6.5), exp(-7),
+                      exp(-8), exp(-9), exp(-10))
+
+for (i in 1:iterations)
+{
+    the.split <- split(Housing2)
+    
+    # Fit Ridge Min & Ridge 1se
+    start.time         <- proc.time()[[3]]
+    model.ridge        <- fit.ridge(Housing2, the.split, start.time, lambda.values.r)
+    mspe.mat    [i, 1] <- model.ridge$MSPE
+    mod.size.mat[i, 1] <- model.ridge$Effect_Min
+    runtime.mat [i, 1] <- model.ridge$Time
+    
+    mspe.mat    [i, 2] <- model.ridge$MSPE
+    mod.size.mat[i, 2] <- model.ridge$Effect_1se
+    runtime.mat [i, 2] <- model.ridge$Time
+    
+    # Fit Lasso Min & Lasso 1se
+    start.time         <- proc.time()[[3]]
+    model.lasso        <- fit.lasso(Housing2, the.split, lambda.values.l)
+    mspe.mat    [i, 3] <- model.lasso$MSPE
+    mod.size.mat[i, 3] <- model.lasso$Length
+    runtime.mat [i, 3] <- proc.time()[[3]] - start.time
+    
+    # Refit Best Model with Lasso 1se
+    start.time         <- proc.time()[[3]]
+    model.1se          <- fit.lasso.1se(Housing2, the.split, lambda.values.l)
+    mspe.mat    [i, 4] <- model.1se$MSPE
+    mod.size.mat[i, 4] <- model.1se$Length
+    runtime.mat [i, 4] <- proc.time()[[3]] - start.time
+    
+    start.time         <- proc.time()[[3]]
+    model.refit        <- refit.lasso.1se(Housing2, the.split, lambda.values.l)
+    mspe.mat    [i, 5] <- model.refit$MSPE
+    mod.size.mat[i, 5] <- model.refit$Length
+    runtime.mat [i, 5] <- proc.time()[[3]] - start.time
+}
+
+```
+
+```{r, warning = FALSE, echo = FALSE, fig.align = "center", fig.width = 10, fig.height = 6}
+
+# Plot the Data
+x.labels <- c("R_min", "R_1se", "L_min", "L_1se", "L_refit")
+
+par( mfrow = c(2, 1) )
+
+make.boxplot(mspe.mat,     "MSPE",       "Boston 2 MSPE")
+make.boxplot(mod.size.mat, "Model Size", "Boston 2 Model Size")
+
+rtime <- as.data.frame( colSums(runtime.mat) )
+rownames(rtime) <- c( "Ridge Min", "Ridge 1se", "Lasso Min", "Lasson 1se", "Lasso Refit" )
+colnames(rtime) <- "Run Time"
+t(rtime)
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Part 3
+# ==================================================
+mspe.mat      <- matrix(0, nrow = 50, ncol = 5)
+mod.size.mat  <- matrix(0, nrow = 50, ncol = 5)
+runtime.mat   <- matrix(0, nrow = 50, ncol = 5)
+iterations    <- 50
+
+# get.lambda.ridge(Housing3, c(0, 10))
+# get.lambda.lasso(Housing3, c(0, -10))
+
+lambda.values.r <- NULL
+lambda.values.l <- c( exp(-6), exp(-5.5), exp(-5),
+                      exp(-4.5), exp(-4), exp(-3.5))
+
+for (i in 1:iterations)
+{
+    the.split <- split(Housing3)
+    
+    # Fit Ridge Min & Ridge 1se
+    start.time         <- proc.time()[[3]]
+    model.ridge        <- fit.ridge(Housing3, the.split, start.time, lambda.values.r)
+    mspe.mat    [i, 1] <- model.ridge$MSPE
+    mod.size.mat[i, 1] <- model.ridge$Effect_Min
+    runtime.mat [i, 1] <- model.ridge$Time
+    
+    mspe.mat    [i, 2] <- model.ridge$MSPE
+    mod.size.mat[i, 2] <- model.ridge$Effect_1se
+    runtime.mat [i, 2] <- model.ridge$Time
+    
+    # Fit Lasso Min & Lasso 1se
+    start.time         <- proc.time()[[3]]
+    model.lasso        <- fit.lasso(Housing3, the.split, lambda.values.l)
+    mspe.mat    [i, 3] <- model.lasso$MSPE
+    mod.size.mat[i, 3] <- model.lasso$Length
+    runtime.mat [i, 3] <- proc.time()[[3]] - start.time
+    
+    # Refit Best Model with Lasso 1se
+    start.time         <- proc.time()[[3]]
+    model.1se          <- fit.lasso.1se(Housing3, the.split, lambda.values.l)
+    mspe.mat    [i, 4] <- model.1se$MSPE
+    mod.size.mat[i, 4] <- model.1se$Length
+    runtime.mat [i, 4] <- proc.time()[[3]] - start.time
+    
+    start.time         <- proc.time()[[3]]
+    model.refit        <- refit.lasso.1se(Housing3, the.split, lambda.values.l)
+    mspe.mat    [i, 5] <- model.refit$MSPE
+    mod.size.mat[i, 5] <- model.refit$Length
+    runtime.mat [i, 5] <- proc.time()[[3]] - start.time
+}
+
+```
+
+```{r, warning = FALSE, echo = FALSE, fig.align = "center", fig.width = 10, fig.height = 6}
+
+# Plot the Data
+x.labels <- c("R_min", "R_1se", "L_min", "L_1se", "L_refit")
+
+par( mfrow = c(2, 1) )
+
+make.boxplot(mspe.mat,     "MSPE",       "Boston 3 MSPE")
+make.boxplot(mod.size.mat, "Model Size", "Boston 3 Model Size")
+
+rtime <- as.data.frame( colSums(runtime.mat) )
+rownames(rtime) <- c( "Ridge Min", "Ridge 1se", "Lasso Min", "Lasson 1se", "Lasso Refit" )
+colnames(rtime) <- "Run Time"
+t(rtime)
+
+```

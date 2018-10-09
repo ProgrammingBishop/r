@@ -1,0 +1,87 @@
+---
+title:  "Untitled"
+output: pdf_document
+---
+
+- A report - 3 pages maximum, .pdf only, that provides the details of your code, e.g., pre-processing, some technical details or implementation details (if not trivial) of the models you use, etc.
+- In addition, report the accuracy (see evaluation metric given below), running time of your code and the computer system you use (e.g., Macbook Pro, 2.53 GHz, 4GB memory, or AWS t2.large). You DO NOT need to submit the part of the code related to the evaluation you conduct.
+
+After running your R code, we should see three .txt files in the same directory named mysubmission1.txt, mysubmission2.txt, and mysubmission3.txt. Each submission file corresponds to a prediction on the test data.
+
+Submission File Format. The file should have the following format (do not forget the comma between PID and Sale_Price):
+PID,  Sale_Price 
+528221060,  169000.7 
+535152150,  14523.6 
+533130020,  195608.2 
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
+
+# Set up Environment
+# ==================================================
+
+ames <- read.csv("./data/ames.csv")
+set.seed(4042)
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Partition the Data
+# ==================================================
+
+split <- function(data)
+{
+    indexes <- sample( seq_len(nrow(data)), 
+                       size = round(nrow(data) * 0.70) )
+
+    train.csv  <- data[ indexes, ]
+    test.csv   <- data[-indexes, ]
+    test.csv.y <- test.csv[,  ncol(test.csv)]
+    test.csv.x <- test.csv[, -ncol(test.csv)]
+    
+    return( list("train"  = train.csv,
+                 "test.x" = test.csv.x,
+                 "test.y" = test.csv.y) )
+}
+
+split <- split(ames)
+
+```
+
+```{r}
+
+# Evaluation Function
+evaluate <- function(test.y) 
+{
+  predictions      <- read.csv("mysubmission1.csv")
+  names(test.y)[2] <- "True_Sale_Price"
+  predictions      <- merge(pred, test.y, by = "PID")
+  
+  sqrt( mean( ( log(pred$Sale_Price) - log(pred$True_Sale_Price) ) ^ 2 ) )
+}
+
+```
+
+```{r}
+
+# Model 1 (Linear Regression)
+# ==================================================
+
+```
+
+```{r}
+
+# Model 2
+# ==================================================
+
+```
+
+```{r}
+
+# Model 3
+# ==================================================
+
+```
+
+
+
