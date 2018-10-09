@@ -12,7 +12,17 @@ Submission File Format. The file should have the following format (do not forget
 PID,  Sale_Price 
 528221060,  169000.7 
 535152150,  14523.6 
-533130020,  195608.2 
+533130020,  195608.2
+
+For each of your two models, prediction error is calculated as the averaged RMSE over 3 splits. Full credit if one of the two errors is below 0.132 and extra credit if below 0.120
+
+Remove variables "Longitude'' and "Latitude''.
+
+Remove categorical variables that contain one "dominating" category. For example, we remove variable Street, as 99.6% samples take the value Pave. Such variables do not capture much variation of samples and may cause issues in cross-validation.
+
+Winsorization. Specifically, substitute 95% (or 5%) percentile for the data above 95% (or below 5%) percentile. Winsorization is a transformation technique to limit extreme values and reduce the effect of potential outliers. 
+
+Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
 
 ```{r, warning = FALSE, echo = FALSE, message = FALSE, include = FALSE}
 
