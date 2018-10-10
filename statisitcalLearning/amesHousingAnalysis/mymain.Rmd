@@ -218,21 +218,53 @@ set.year.levels <- function(nodes, variable)
 
 # -------------------------
 
-# New Year Levels
+# New Year_Built Levels
 year_built.levels      <- sort( get.year.partitions(split$train$Year_Built) )
-# split$train$Year_Built <- 
-a <-  set.year.levels(year_built.levels, split$train$Year_Built)
+split$train$Year_Built <- factor( set.year.levels(year_built.levels, split$train$Year_Built) )
 
 ```
 
+
+
+```{r}
+
+# Locate Columns with Missing Values
+na.columns <- colnames( split$train )[ colSums( is.na( split$train ) ) > 0 ]
+
+# Replace Missing Values
+set.missing.values <- function(the.data)
+{
+  train <- the.data
+  
+  # For Each Variable
+  for( col in 1:ncol(train) )
+  {
+    # If Numeric Replace with Mean
+    if ( is.numeric( train[, col ] ) )
+    {
+      train[ is.na( train[, col ] ), col ] <- round( mean( train[, col ], na.rm = TRUE), digits = 0 )
+    }
+    
+    # If Categorical Replace with Most Common Category
+    else if ( is.character( train[, col ] ) )
+    {
+      train[ is.na( train[, col ] ), col ] <- 
+        names( table( train[, col ] )[ which.max( table( train[, col ] ) ) ] )
+    }
+  }
+  
+  return(train) 
+}
+
+if ( length(na.columns) > 0 ) { split$train <- set.missing.values(split$train) }
+
+```
 
 
 
 ```{r}
 
 # Winsorization
-colnames(split$train)[colSums(is.na(split$train)) > 0]
-
 summary(split$train)
 split$train <- Winsorize( split$train, minval = NULL, maxval = NULL, probs = c(0.05, 0.95),  na.rm = FALSE )
 
