@@ -33,10 +33,7 @@ set.seed(4042)
 packages <- c("DescTools", "tree")   
 init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
 
-if ( length(init.pkg) > 0 ) 
-{
-    install.packages(init.pkg)
-} 
+if ( length(init.pkg) > 0 ) { install.packages(init.pkg) } 
 
 lapply(packages, require, character.only = TRUE)
 
@@ -111,10 +108,9 @@ The two methods can be the same algorithm with two sets of parameters (i.e., XGb
 
 ```{r}
 
-# Preprocessing
+# Find Majority Factor Function
 # ==================================================
 
-# Find Majority Factor Function
 get.maj.factors <- function(vars, thresh)
 {
   vars.to.remove <- character()
@@ -142,11 +138,11 @@ get.maj.factors <- function(vars, thresh)
   return(vars.to.remove)
 }
 
-
 # -------------------------
 
 # Remove Longitude and Latitude
 split$train <- split$train[, -c(81, 82)]
+
 
 # Identify & Remove Majority Factors Variables
 factor.vars  <- split$train[, sapply(split$train, is.factor) ]
@@ -229,7 +225,10 @@ split$train$Year_Built <- factor( set.year.levels(year_built.levels, split$train
 ```{r}
 
 # Locate Columns with Missing Values
+# ==================================================
+
 na.columns <- colnames( split$train )[ colSums( is.na( split$train ) ) > 0 ]
+
 
 # Replace Missing Values
 set.missing.values <- function(the.data)
@@ -256,6 +255,7 @@ set.missing.values <- function(the.data)
   return(train) 
 }
 
+
 if ( length(na.columns) > 0 ) { split$train <- set.missing.values(split$train) }
 
 ```
@@ -265,8 +265,29 @@ if ( length(na.columns) > 0 ) { split$train <- set.missing.values(split$train) }
 ```{r}
 
 # Winsorization
-summary(split$train)
-split$train <- Winsorize( split$train, minval = NULL, maxval = NULL, probs = c(0.05, 0.95),  na.rm = FALSE )
+# ==================================================
+
+# Winsorize Numerical Values
+winsorize.values <- function(data)
+{
+  train <- data
+  
+  # For Each Variable
+  for( col in 2:(ncol(train) - 1) )
+  {
+    # Winsorize Numerical Columns
+    if ( is.numeric( train[, col ] ) )
+    {
+      train[, col ] <- Winsorize( train[, col ], 
+                                  minval = NULL, maxval = NULL, 
+                                  probs = c(0.05, 0.95), na.rm = FALSE )
+    }
+  }
+  
+  return(train) 
+}
+
+split$train <- winsorize.values(split$train)
 
 ```
 
