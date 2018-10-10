@@ -30,7 +30,7 @@ set.seed(4042)
 
 # Install Packages
 # ==================================================
-packages <- c("DescTools", "tree")   
+packages <- c("DescTools", "tree", "glmnet")   
 init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
 
 if ( length(init.pkg) > 0 ) { install.packages(init.pkg) } 
@@ -97,15 +97,6 @@ save.output <- function(predictions, number)
 
 
 
-TIPS
-
-Winsorization. Specifically, substitute 95% (or 5%) percentile for the data above 95% (or below 5%) percentile. Winsorization is a transformation technique to limit extreme values and reduce the effect of potential outliers. 
-
-Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
-
-The two methods can be the same algorithm with two sets of parameters (i.e., XGboost with two sets of tuning parameters)
-
-
 ```{r}
 
 # Find Majority Factor Function
@@ -150,6 +141,8 @@ drop.columns <- get.maj.factors(factor.vars, 0.95)
 split$train  <- split$train[, !( names(split$train) %in% drop.columns ) ]
 
 ```
+
+
 
 ```{r}
 
@@ -291,7 +284,52 @@ split$train <- winsorize.values(split$train)
 
 ```
 
+TIPS
+- Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
+- The two methods can be the same algorithm with two sets of parameters (i.e., XGboost with two sets of tuning parameters)
 
+
+```{r}
+
+# Get Lambda Parameter Function
+# ==================================================
+
+get.lambda.lasso <- function(data, y.limit)
+{
+    lambda.matrix <- matrix( 0, nrow = 50, ncol = 4 )
+    
+    for ( i in 1:nrow( lambda.matrix ) )
+    {
+        model.cv <- cv.glmnet( as.matrix( data[, 2:( ncol(data) - 1) ] ), 
+                               as.matrix( data[, ncol(data) ] ) )
+        
+        lambda.matrix[i, 1] <- min(model.cv$lambda)
+        lambda.matrix[i, 2] <- max(model.cv$lambda)
+        lambda.matrix[i, 3] <- model.cv$lambda.min
+        lambda.matrix[i, 4] <- model.cv$lambda.1se
+    }
+    
+    lambda.matrix <- log( lambda.matrix )
+    
+    plot ( lambda.matrix[ , 1], type = "l", col = "red", ylim = y.limit, main = "Lasso") # Min
+    lines( lambda.matrix[ , 2], type = "l", col = "blue" )                               # Max
+    lines( lambda.matrix[ , 3], type = "l", col = "orange" )                             # L Min
+    lines( lambda.matrix[ , 4], type = "l", col = "green" )                              # L 1se
+}
+
+
+# Create Dummy Variable Matrix for cv.glmnet
+dummy.matrix <- model.frame(split$train)
+dummy.matrix <- stats::model.matrix( dummy.matrix, data = dummy.matrix )
+
+
+# Identify Optimum Lambda Values
+get.lambda.lasso( dummy.matrix, c(-10, 10) )
+
+lambda.values.r <- NULL
+lambda.values.l <- c( exp(5.0), exp(5.5), exp(6.0), exp(6.5), exp(7.0), exp(7.5) )
+
+```
 
 
 
