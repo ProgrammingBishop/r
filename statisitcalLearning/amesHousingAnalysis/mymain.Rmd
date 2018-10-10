@@ -30,7 +30,7 @@ set.seed(4042)
 
 # Install Packages
 # ==================================================
-packages <- c("DescTools")   
+packages <- c("DescTools", "tree")   
 init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
 
 if ( length(init.pkg) > 0 ) 
@@ -157,12 +157,71 @@ split$train  <- split$train[, !( names(split$train) %in% drop.columns ) ]
 
 ```{r}
 
-# Refactorize Overall_QUal
+# Refactorize Factor Variables
 # ==================================================
 
+# Overall_QUal
 levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_Poor", "Poor", "Fair",  "Below_Average" ) ]  <- "low"
 levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Average",   "Above_Average", "Good" ) ]           <- "avg"
 levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_Good", "Excellent",     "Very_Excellent" ) ] <- "high"
+
+# -------------------------
+
+# Year Partition Function
+get.year.partitions <- function(x)
+{
+  # Build Tree
+  tree.model <- tree(Sale_Price ~ x, data = split$train, mindev = 0.0015)
+  left.split <- tree.model$frame$splits[, 1]
+  splits     <- left.split[left.split != ""]
+  
+  # Coerce Leaf Nodes into Integers
+  for ( leaf in 1:length(splits) )
+  {
+    splits[leaf] <- gsub( "<", "", splits[leaf] )
+  }
+  
+  splits <- as.numeric(splits)
+}
+
+
+# Set New Year Levels
+set.year.levels <- function(nodes, variable)
+{
+  variable     <- as.numeric( variable )
+  new.variable <- rep( 0, length(variable) )
+  
+  min.year <- floor( min(nodes) )
+  max.year <- floor( max(nodes) )
+  
+  # For All Rows Above Min and Below Max
+  for ( row in 1:length(variable) )
+  {
+    # Assign Lower and Upper Bound Nodes
+    if ( variable[row] <= min.year ) { new.variable[row] <- paste("<", min.year, sep = "" ) }
+    if ( variable[row] >= max.year ) { new.variable[row] <- paste(">", max.year, sep = "" ) }
+    
+    # For Each Possible Category
+    for ( node in 2:( length(nodes) ) ) {
+      # Check If Node Falls into Interval
+      if ( variable[row] <= nodes[node] && new.variable[row] == 0 )
+      {
+        left              <- as.character( floor( nodes[node - 1] ) )
+        right             <- as.character( floor( nodes[node    ] ) )
+        new.variable[row] <- paste( left, " - ", right, sep = "" )
+      }
+    }  
+  }
+  
+  return(new.variable)
+}
+
+# -------------------------
+
+# New Year Levels
+year_built.levels      <- sort( get.year.partitions(split$train$Year_Built) )
+# split$train$Year_Built <- 
+a <-  set.year.levels(year_built.levels, split$train$Year_Built)
 
 ```
 
@@ -172,6 +231,8 @@ levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_G
 ```{r}
 
 # Winsorization
+colnames(split$train)[colSums(is.na(split$train)) > 0]
+
 summary(split$train)
 split$train <- Winsorize( split$train, minval = NULL, maxval = NULL, probs = c(0.05, 0.95),  na.rm = FALSE )
 
