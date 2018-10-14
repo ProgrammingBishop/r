@@ -21,6 +21,7 @@ editor_options:
 # Set up Environment
 # ==================================================
 
+setwd('D:\\git\\rMachineLearning\\statisitcalLearning\\amesHousingAnalysis')
 ames <- read.csv("./data/ames.csv")
 set.seed(4042)
 
@@ -30,68 +31,12 @@ set.seed(4042)
 
 # Install Packages
 # ==================================================
-packages <- c("DescTools", "tree", "glmnet")   
+packages <- c("DescTools", "tree", "glmnet", "randomForest", "xgboost")   
 init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
 
 if ( length(init.pkg) > 0 ) { install.packages(init.pkg) } 
 
 lapply(packages, require, character.only = TRUE)
-
-```
-
-
-
-
-```{r, warning = FALSE, echo = FALSE, message = FALSE}
-
-# Partition Function
-# ==================================================
-
-make.split <- function(data)
-{
-    indexes <- sample( seq_len(nrow(data)), 
-                       size = round(nrow(data) * 0.70) )
-
-    train.csv  <- data[ indexes, ]
-    test.csv   <- data[-indexes, ]
-    test.csv.y <- test.csv[,  ncol(test.csv)]
-    test.csv.x <- test.csv[, -ncol(test.csv)]
-    
-    return( list("train"  = train.csv,
-                 "test.x" = test.csv.x,
-                 "test.y" = test.csv.y) )
-}
-
-split <- make.split(ames)
-
-```
-
-```{r, warning = FALSE, echo = FALSE, message = FALSE}
-
-# Evaluation Function
-# ==================================================
-
-evaluate <- function(test.y) 
-{
-  pred             <- read.csv("mysubmission1.txt")
-  names(test.y)[2] <- "True_Sale_Price"
-  pred             <- merge(pred, test.y, by = "PID")
-  
-  sqrt( mean( ( log(pred$Sale_Price) - log(pred$True_Sale_Price) ) ^ 2 ) )
-}
-
-```
-
-```{r, warning = FALSE, echo = FALSE, message = FALSE}
-
-# Save Output Function
-# ==================================================
-
-save.output <- function(predictions, number)
-{
-  write.table(predictions, file = paste( "mysubmission", number, ".txt", sep = "" ), sep = ", ",
-              row.names = FALSE, col.names = c( "PID", "Sale_Price" )  )
-}
 
 ```
 
@@ -129,16 +74,37 @@ get.maj.factors <- function(vars, thresh)
   return(vars.to.remove)
 }
 
-# -------------------------
-
-# Remove Longitude and Latitude
-split$train <- split$train[, -c(81, 82)]
+```
 
 
-# Identify & Remove Majority Factors Variables
-factor.vars  <- split$train[, sapply(split$train, is.factor) ]
-drop.columns <- get.maj.factors(factor.vars, 0.95)
-split$train  <- split$train[, !( names(split$train) %in% drop.columns ) ]
+
+```{r}
+
+# Locate Columns with Missing Values
+# ==================================================
+
+# Replace Missing Values
+set.missing.values <- function(the.data)
+{
+  # For Each Variable
+  for( col in 1:ncol(the.data) )
+  {
+    # If Numeric Replace with Mean
+    if ( is.numeric( the.data[, col ] ) )
+    {
+      the.data[ is.na( the.data[, col ] ), col ] <- round( mean( the.data[, col ], na.rm = TRUE), digits = 0 )
+    }
+    
+    # If Categorical Replace with Most Common Category
+    else if ( is.character( the.data[, col ] ) )
+    {
+      the.data[ is.na( the.data[, col ] ), col ] <- 
+        names( table( the.data[, col ] )[ which.max( table( the.data[, col ] ) ) ] )
+    }
+  }
+  
+  return(the.data) 
+}
 
 ```
 
@@ -150,17 +116,21 @@ split$train  <- split$train[, !( names(split$train) %in% drop.columns ) ]
 # ==================================================
 
 # Overall_QUal
-levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_Poor", "Poor", "Fair",  "Below_Average" ) ]  <- "low"
-levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Average",   "Above_Average", "Good" ) ]           <- "avg"
-levels(split$train$Overall_Qual)[levels(split$train$Overall_Qual) %in% c("Very_Good", "Excellent",     "Very_Excellent" ) ] <- "high"
+refactor.overall_qual <- function(variable) 
+{
+  levels(variable)[levels(variable) %in% c("Very_Poor", "Poor", "Fair",  "Below_Average" ) ]  <- "low"
+  levels(variable)[levels(variable) %in% c("Average",   "Above_Average", "Good" ) ]           <- "avg"
+  levels(variable)[levels(variable) %in% c("Very_Good", "Excellent",     "Very_Excellent" ) ] <- "high"
+  
+  return(variable)
+}
 
-# -------------------------
 
 # Year Partition Function
-get.year.partitions <- function(x)
+get.year.partitions <- function(the.data, variable)
 {
   # Build Tree
-  tree.model <- tree(Sale_Price ~ x, data = split$train, mindev = 0.0015)
+  tree.model <- tree(Sale_Price ~ variable, data = the.data, mindev = 0.0015)
   left.split <- tree.model$frame$splits[, 1]
   splits     <- left.split[left.split != ""]
   
@@ -195,7 +165,7 @@ set.year.levels <- function(nodes, variable)
       # Check If Node Falls into Interval
       if ( variable[row] <= nodes[node] && new.variable[row] == 0 )
       {
-        left              <- as.character( floor( nodes[node - 1] ) )
+        left              <- as.character( floor( nodes[node - 1] + 1 ) )
         right             <- as.character( floor( nodes[node    ] ) )
         new.variable[row] <- paste( left, " - ", right, sep = "" )
       }
@@ -204,52 +174,6 @@ set.year.levels <- function(nodes, variable)
   
   return(new.variable)
 }
-
-# -------------------------
-
-# New Year_Built Levels
-year_built.levels      <- sort( get.year.partitions(split$train$Year_Built) )
-split$train$Year_Built <- factor( set.year.levels(year_built.levels, split$train$Year_Built) )
-
-```
-
-
-
-```{r}
-
-# Locate Columns with Missing Values
-# ==================================================
-
-na.columns <- colnames( split$train )[ colSums( is.na( split$train ) ) > 0 ]
-
-
-# Replace Missing Values
-set.missing.values <- function(the.data)
-{
-  train <- the.data
-  
-  # For Each Variable
-  for( col in 1:ncol(train) )
-  {
-    # If Numeric Replace with Mean
-    if ( is.numeric( train[, col ] ) )
-    {
-      train[ is.na( train[, col ] ), col ] <- round( mean( train[, col ], na.rm = TRUE), digits = 0 )
-    }
-    
-    # If Categorical Replace with Most Common Category
-    else if ( is.character( train[, col ] ) )
-    {
-      train[ is.na( train[, col ] ), col ] <- 
-        names( table( train[, col ] )[ which.max( table( train[, col ] ) ) ] )
-    }
-  }
-  
-  return(train) 
-}
-
-
-if ( length(na.columns) > 0 ) { split$train <- set.missing.values(split$train) }
 
 ```
 
@@ -280,13 +204,91 @@ winsorize.values <- function(data)
   return(train) 
 }
 
-split$train <- winsorize.values(split$train)
+```
+
+
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Partition Function
+# ==================================================
+
+make.split <- function(data)
+{
+    indexes <- sample( seq_len(nrow(data)), 
+                       size = round(nrow(data) * 0.70) )
+
+    train.csv <- data[ indexes, ]
+    test.csv  <- data[-indexes, ]
+    
+    return( list("train"= train.csv,
+                 "test"  = test.csv) )
+}
+
+split <- make.split(ames)
+
+# Remove Longitude and Latitude
+split$train <- split$train[, -c(81, 82)]
+split$test  <- split$test [, -c(81, 82)]
 
 ```
 
-TIPS
-- Fit a linear model with Lasso regularization. Tune by cross validation and use lambda.min.
-- The two methods can be the same algorithm with two sets of parameters (i.e., XGboost with two sets of tuning parameters)
+
+
+```{r}
+
+# Preprocess Partitions
+# ==================================================
+
+preprocess <- function(partition)
+{
+  # Drop Factor Variables with Majority Class
+  factor.vars  <- partition[, sapply(partition, is.factor) ]
+  drop.columns <- get.maj.factors(factor.vars, 0.95)
+  partition    <- partition[, !( names(partition) %in% drop.columns ) ]
+  
+  # Fix NA Values
+  na.columns <- colnames( partition )[ colSums( is.na( partition ) ) > 0 ]
+  if ( length(na.columns) > 0 ) { partition <- set.missing.values(partition) }
+  
+  # Refactor Overall_Qual
+  partition$Overall_Qual <- refactor.overall_qual( partition$Overall_Qual )
+  
+  # Winsorize Variables
+  partition <- cbind( "PID" = partition[, 1], winsorize.values(partition[, -1]) )
+  
+  return( partition )
+}
+
+split$train <- preprocess(split$train)
+split$test  <- preprocess(split$test)
+
+```
+
+
+
+```{r}
+
+# Refactor Categories
+# ==================================================
+  
+# New Year_Built Levels
+year_built             <- sort( get.year.partitions(split$train, split$train$Year_Built) )
+split$train$Year_Built <- factor( set.year.levels(year_built, split$train$Year_Built) )
+split$test$Year_Built  <- factor( set.year.levels(year_built, split$test$Year_Built) )
+
+# New Year_Remod_add
+year_remod_add             <- sort( get.year.partitions(split$train, split$train$Year_Remod_Add) )
+split$train$Year_Remod_Add <- factor( set.year.levels( year_remod_add, split$train$Year_Remod_Add) )
+split$test$Year_Remod_Add  <- factor( set.year.levels( year_remod_add, split$test$Year_Remod_Add) )
+
+# New Garage_Yr_blt
+garage_yr_blt             <- sort( get.year.partitions(split$train, split$train$Garage_Yr_Blt) )
+split$train$Garage_Yr_Blt <- factor( set.year.levels( garage_yr_blt, split$train$Garage_Yr_Blt) )
+split$test$Garage_Yr_Blt  <- factor( set.year.levels( garage_yr_blt, split$test$Garage_Yr_Blt) )
+
+```
+
 
 
 ```{r}
@@ -324,7 +326,7 @@ dummy.matrix <- stats::model.matrix( dummy.matrix, data = dummy.matrix )
 
 
 # Identify Optimum Lambda Values
-get.lambda.lasso( dummy.matrix, c(-10, 10) )
+# get.lambda.lasso( dummy.matrix, c(4, 15) ) # Uncomment to Run Lambda Search
 
 lambda.values.r <- NULL
 lambda.values.l <- c( exp(5.0), exp(5.5), exp(6.0), exp(6.5), exp(7.0), exp(7.5) )
@@ -335,31 +337,163 @@ lambda.values.l <- c( exp(5.0), exp(5.5), exp(6.0), exp(6.5), exp(7.0), exp(7.5)
 
 ```{r}
 
-# Model 1 (Linear Regression)
+# Variable Selection
 # ==================================================
+
+full.model <- lm( Sale_Price ~ . - PID, split$train )
+
+# AIC
+model.aic.f <- step( lm( Sale_Price ~ 1, split$train ), 
+                     list(upper = full.model),
+                     trace = 0, direction = "forward" )
+
+model.aic.b <- step( full.model, trace = 0, direction = "backward" )
+  
+# BIC
+model.bic.f <- step( lm( Sale_Price ~ 1, split$train ), 
+                     list(upper = full.model),
+                     trace = 0, direction = "forward", k = log( nrow(split$train) ) )
+
+model.bic.b = step( full.model, trace = 0, direction = "backward", k = log( nrow(split$train) ) )
+
+which.max( c( summary(model.aic.f)$adj.r.squared, summary(model.aic.b)$adj.r.squared,
+              summary(model.bic.f)$adj.r.squared, summary(model.bic.b)$adj.r.squared) )
+
+# Significant Variables
+pred.vars       <- attr( terms(model.aic.b), "predvars" )
+pred.vars.names <- vector()
+
+for ( i in 2:length(pred.vars) )
+{
+  pred.vars.names[i - 1] <- as.character( pred.vars[[i]] )
+}
+
+sig.train.x <- cbind("PID" = split$train$PID, split$train[, pred.vars.names[2:length(pred.vars.names)] ] )
+sig.train.y <- split$train[, pred.vars.names[1] ]
+
+sig.test.x <- cbind("PID" = split$test$PID, split$test[, pred.vars.names[2:length(pred.vars.names)] ] )
+sig.test.y <- split$test[, pred.vars.names[1] ]
 
 ```
 
+
+
 ```{r}
 
-# Model 1 Predictions Output
+# Model 1 - Cross Validation
 # ==================================================
+
+# One Hot Encoding
+dummy.train.x <- model.frame( cbind( rep(1, nrow(dummy.train.x) ), sig.train.x ) )
+dummy.train.x <- stats::model.matrix( dummy.train.x, data = dummy.train.x )
+
+dummy.test.x <- model.frame( cbind( rep(1, nrow(dummy.test.x) ), sig.test.x ) )
+dummy.test.x <- stats::model.matrix( dummy.test.x, data = dummy.test.x )
+
+# Fit New Model
+model.cv <- cv.glmnet( as.matrix( dummy.train.x[, 3:ncol(dummy.train.x) ] ), 
+                       as.matrix( sig.train.y ), 
+                       alpha = 1, lambda = lambda.values.l )
+                          
+best.lambda <- model.cv$lambda.min
+predictions <- round( predict( model.cv, s = best.lambda, newx = dummy.test.x[, 3:ncol(dummy.test.x) ] ), 2 )
+
+# Get MSPE
+sqrt( mean( ( log(predictions) - log(sig.test.y) ) ^ 2 ) )
 
 ```
 
 
 
-
 ```{r}
 
-# Model 2
+# Model 2 - XGBoost
 # ==================================================
+
+# Random Forest
+rf.data    <- cbind(sig.train.y, sig.train.x[, -1])
+rf.model   <- randomForest( sig.train.y ~ ., data = rf.data, ntree = 500 )
+rf.predict <- predict( rf.model, sig.test.x[, -1] )
+
+sqrt( mean( ( log(rf.predict) - log(sig.test.y) ) ^ 2 ) )
+
+
+# XG Boosting
+dummy.train.x <- model.frame( cbind( rep(1, nrow(dummy.train.x) ), sig.train.x ) )
+dummy.train.x <- stats::model.matrix( dummy.train.x, data = dummy.train.x )
+
+dummy.test.x <- model.frame( cbind( rep(1, nrow(dummy.test.x) ), sig.test.x ) )
+dummy.test.x <- stats::model.matrix( dummy.test.x, data = dummy.test.x )
+
+
+xg.train <- xgb.DMatrix(data = dummy.train.x[, -c(1:2)], label = sig.train.y) 
+xg.test  <- xgb.DMatrix(data = dummy.test.x [, -c(1:2)], label = sig.test.y) 
+
+params <- list(booster          = "gbtree", 
+               objective        = "reg:linear", 
+               eta              = 0.35, 
+               gamma            = 0, 
+               max_depth        = 6, 
+               min_child_weight = 1, 
+               subsample        = 1, 
+               colsample_bytree = 1)
+
+xg.cv <- xgb.cv(params           = params, 
+                data             = xg.train, 
+                nrounds          = 100, 
+                nfold            = 10, 
+                showsd           = T, 
+                stratified       = T,
+                early_stop_round = 20, 
+                maximize         = F)
+
+best.iter <- which( xg.cv[[4]][, "test_rmse_mean" ] == min( xg.cv[[4]][, "test_rmse_mean" ] ) )
+
+xg.train.1 <- xgb.train (params           = params, 
+                         data             = xg.train, 
+                         nrounds          = best.iter, 
+                         watchlist        = list(val = xg.test, train = xg.train), 
+                         early_stop_round = 10, 
+                         maximize         = F , 
+                         eval_metric      = "rmse")
+
+xg.predict <- predict( xg.train.1, xg.test )
+
+sqrt( mean( ( log(xg.predict) - log(sig.test.y) ) ^ 2 ) )
 
 ```
 
-```{r}
 
-# Model 1 Predictions Output
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Save Output Function
 # ==================================================
+
+save.output <- function(id, predictions, number)
+{
+  file.data <- cbind( "PID" = id, "Sale_Price" = predictions )
+    
+  write.table( file.data, file = paste( "mysubmission", number, ".txt", sep = "" ), sep = ", ",
+              row.names = FALSE, col.names = c( "PID", "Sale_Price" )  )
+}
+
+save.output( dummy.test.x[, "PID"], predictions, 1 )
+
+```
+
+```{r, warning = FALSE, echo = FALSE, message = FALSE}
+
+# Evaluation Function
+# ==================================================
+
+evaluate <- function(test.y) 
+{
+  pred             <- read.csv("mysubmission1.txt")
+  names(test.y)[2] <- "True_Sale_Price"
+  pred             <- merge(pred, test.y, by = "PID")
+  
+  sqrt( mean( ( log(pred$Sale_Price) - log(pred$True_Sale_Price) ) ^ 2 ) )
+}
 
 ```
