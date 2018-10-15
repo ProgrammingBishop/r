@@ -31,7 +31,7 @@ set.seed(4042)
 
 # Install Packages
 # ==================================================
-packages <- c("DescTools", "tree", "glmnet", "randomForest", "xgboost")   
+packages <- c("DescTools", "tree", "glmnet", "randomForest", "xgboost", "gbm", "pls")   
 init.pkg <- setdiff( packages, rownames( installed.packages() ) )  
 
 if ( length(init.pkg) > 0 ) { install.packages(init.pkg) } 
@@ -374,32 +374,63 @@ sig.train.y <- split$train[, pred.vars.names[1] ]
 sig.test.x <- cbind("PID" = split$test$PID, split$test[, pred.vars.names[2:length(pred.vars.names)] ] )
 sig.test.y <- split$test[, pred.vars.names[1] ]
 
+
+# # Partial Least Squares
+# pls.model <- plsr( Sale_Price ~ ., data = split$train, validation = "CV" )
+# cv        <- RMSEP(pls.model)
+# best.dims <- which.min( cv$val[estimate = "adjCV", , ] ) - 1
+#  
+# # Rerun the model
+# pls.model <- plsr( Sale_Price ~ ., data = split$train, ncomp = best.dims )
+# 
+# pred.vars       <- attr( terms(pls.model), "predvars" )
+# pred.vars.names <- vector()
+# 
+# for ( i in 2:length(pred.vars) )
+# {
+#   pred.vars.names[i - 1] <- as.character( pred.vars[[i]] )
+# }
+# 
+# sig.train.x <- cbind("PID" = split$train$PID, split$train[, pred.vars.names[2:length(pred.vars.names)] ] )
+# sig.train.y <- split$train[, pred.vars.names[1] ]
+# 
+# sig.test.x <- cbind("PID" = split$test$PID, split$test[, pred.vars.names[2:length(pred.vars.names)] ] )
+# sig.test.y <- split$test[, pred.vars.names[1] ]
+
 ```
 
 
 
 ```{r}
 
-# Model 1 - Cross Validation
+# Generate Dummy Matrices
 # ==================================================
 
-# One Hot Encoding
 dummy.train.x <- model.frame( cbind( rep(1, nrow(dummy.train.x) ), sig.train.x ) )
 dummy.train.x <- stats::model.matrix( dummy.train.x, data = dummy.train.x )
 
 dummy.test.x <- model.frame( cbind( rep(1, nrow(dummy.test.x) ), sig.test.x ) )
 dummy.test.x <- stats::model.matrix( dummy.test.x, data = dummy.test.x )
 
-# Fit New Model
-model.cv <- cv.glmnet( as.matrix( dummy.train.x[, 3:ncol(dummy.train.x) ] ), 
+```
+
+
+
+```{r}
+
+# Model 1 - GLMNET
+# ==================================================
+
+# Fit GLMNET
+model.cv <- cv.glmnet( as.matrix( dummy.train.x[, -c(1:2)] ), 
                        as.matrix( sig.train.y ), 
-                       alpha = 1, lambda = lambda.values.l )
+                       alpha = 1, lambda = NULL )
                           
 best.lambda <- model.cv$lambda.min
-predictions <- round( predict( model.cv, s = best.lambda, newx = dummy.test.x[, 3:ncol(dummy.test.x) ] ), 2 )
+cv.pred     <- round( predict( model.cv, s = best.lambda, newx = dummy.test.x[, -c(1:2)] ), 2 )
 
 # Get MSPE
-sqrt( mean( ( log(predictions) - log(sig.test.y) ) ^ 2 ) )
+sqrt( mean( ( log(cv.pred) - log(sig.test.y) ) ^ 2 ) )
 
 ```
 
@@ -409,22 +440,6 @@ sqrt( mean( ( log(predictions) - log(sig.test.y) ) ^ 2 ) )
 
 # Model 2 - XGBoost
 # ==================================================
-
-# Random Forest
-rf.data    <- cbind(sig.train.y, sig.train.x[, -1])
-rf.model   <- randomForest( sig.train.y ~ ., data = rf.data, ntree = 500 )
-rf.predict <- predict( rf.model, sig.test.x[, -1] )
-
-sqrt( mean( ( log(rf.predict) - log(sig.test.y) ) ^ 2 ) )
-
-
-# XG Boosting
-dummy.train.x <- model.frame( cbind( rep(1, nrow(dummy.train.x) ), sig.train.x ) )
-dummy.train.x <- stats::model.matrix( dummy.train.x, data = dummy.train.x )
-
-dummy.test.x <- model.frame( cbind( rep(1, nrow(dummy.test.x) ), sig.test.x ) )
-dummy.test.x <- stats::model.matrix( dummy.test.x, data = dummy.test.x )
-
 
 xg.train <- xgb.DMatrix(data = dummy.train.x[, -c(1:2)], label = sig.train.y) 
 xg.test  <- xgb.DMatrix(data = dummy.test.x [, -c(1:2)], label = sig.test.y) 
@@ -445,19 +460,22 @@ xg.cv <- xgb.cv(params           = params,
                 showsd           = T, 
                 stratified       = T,
                 early_stop_round = 20, 
-                maximize         = F)
+                maximize         = F,
+                print_every_n    = 10)
 
 best.iter <- which( xg.cv[[4]][, "test_rmse_mean" ] == min( xg.cv[[4]][, "test_rmse_mean" ] ) )
 
-xg.train.1 <- xgb.train (params           = params, 
+
+xg.train.1 <- xgb.train( params           = params, 
                          data             = xg.train, 
                          nrounds          = best.iter, 
                          watchlist        = list(val = xg.test, train = xg.train), 
                          early_stop_round = 10, 
                          maximize         = F , 
-                         eval_metric      = "rmse")
+                         eval_metric      = "rmse",
+                         print_every_n    = 10 )
 
-xg.predict <- predict( xg.train.1, xg.test )
+xg.predict <- round( predict( xg.train.1, xg.test ), 2 )
 
 sqrt( mean( ( log(xg.predict) - log(sig.test.y) ) ^ 2 ) )
 
@@ -472,13 +490,14 @@ sqrt( mean( ( log(xg.predict) - log(sig.test.y) ) ^ 2 ) )
 
 save.output <- function(id, predictions, number)
 {
-  file.data <- cbind( "PID" = id, "Sale_Price" = predictions )
+  file.data <- cbind( "PID" = id, "Sale_Price" = round(predictions, 2) )
     
   write.table( file.data, file = paste( "mysubmission", number, ".txt", sep = "" ), sep = ", ",
               row.names = FALSE, col.names = c( "PID", "Sale_Price" )  )
 }
 
-save.output( dummy.test.x[, "PID"], predictions, 1 )
+save.output( dummy.test.x[, "PID"], cv.pred,    1 )
+save.output( dummy.test.x[, "PID"], xg.predict, 2 )
 
 ```
 
